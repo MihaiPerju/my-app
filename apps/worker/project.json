@@ -1,0 +1,18 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "worker",
+  "projectType": "application",
+  "targets": {
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "bash tools/uv.sh run --no-sync python -m worker.entrypoints.dev",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "register-schedules": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash tools/worker-schedules.sh", "cwd": "{workspaceRoot}" }
+    }
+  }
+}

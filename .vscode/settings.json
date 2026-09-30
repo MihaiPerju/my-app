@@ -1,0 +1,17 @@
+{
+  "typescript.preferences.autoImportFileExcludePatterns": [
+    ".mistral/repositories/**"
+  ],
+  "javascript.preferences.autoImportFileExcludePatterns": [
+    ".mistral/repositories/**"
+  ],
+  "files.exclude": {
+    ".mistral/repositories/**": true
+  },
+  "files.watcherExclude": {
+    ".mistral/repositories/**": true
+  },
+  "search.exclude": {
+    ".mistral/repositories/**": true
+  }
+}

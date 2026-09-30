@@ -1,0 +1,105 @@
+---
+id: managed-deployments
+title: Managed Deployments
+sidebar_position: 4.1
+---
+
+_Run the worker on the Mistral platform: one command deploys it, one more sends it work_
+
+# Overview
+
+A managed deployment hosts the worker for you: the platform builds the Docker image from the repo, runs it, and reports status. The worker connects out to the Mistral-hosted Temporal service, so there is no cluster to run and no port to expose.
+
+## Deploy: `mistral apps deploy`
+
+```bash
+git push
+mistral apps deploy
+```
+
+Run from the app root after `mistral login`. The workflows capability marks the `worker` module `"platform": "workflows"`, and `mistral apps deploy` runs that module as a managed deployment. It:
+
+- names the deployment `<app>-<module>`, where `<app>` is the platform app's name (`--name` on the first deploy, or else the directory name), for example `my-app-worker`, and prints it;
+- builds the pushed commit on Mistral Cloud from `deploy/docker/Dockerfile.worker` at the repo root, using its last stage;
+- sets `DEPLOYMENT_NAME` to that name on the app's other deployed modules, so the deployed API dispatches to it;
+- waits until the new worker has registered, and fails with the platform's message if the build or rollout fails.
+
+The first run creates the deployment. Later runs update it to the new commit, including a moved origin or renamed repository, and the old replica keeps serving until the new one is up. A run on a commit that is already live does nothing. An app declares at most one such worker.
+
+The deployment name is per app, so everyone who deploys the same app updates the same deployment. A local worker keeps polling the per-user `DEPLOYMENT_NAME` from `.env`, so it never takes work meant for the managed one.
+
+### What the Build Needs
+
+Mistral Cloud builds the image. An app whose Python dependencies all resolve from public PyPI builds as-is. A `workflows` app generated in Git mode does. One generated in package mode does not, because every `mistralai-capabilities-*` toolkit, this one included, comes from the private `mistralai` index.
+
+A dependency bound to the private `mistralai` index (every capability toolkit in package mode, and the private dependencies of the `agents`, `evals` and `guardrailing` toolkits in any mode) needs a credential at build time. Bind it as a secret under the deployment's `backend_spec.secrets`: each binding's `env_var_name` reaches the build as a Docker build arg, and the `Dockerfile` opts in by declaring a matching `ARG`. The shipped `Dockerfile.worker` reads the token from a BuildKit secret mount, which Mistral Cloud does not provide, so add `ARG UV_INDEX_MISTRALAI_USERNAME` and `ARG UV_INDEX_MISTRALAI_PASSWORD` to the build stage and bind the secret under those two names.
+
+`mistral apps deploy` does not set bindings. The `mistralai` SDK cannot send them either (its backend spec has only `build_directory` and `dockerfile_path` through 2.10.1), so set them with a `PATCH` to `/v1/workflows/deployments/{name}`. Each binding names a workspace secret, which the platform resolves at build time, so create the secrets first. The username is the `MISTRAL_REGISTRY_USER` value exported by the app's `tools/uv.sh`, which depends on the index the app was generated against, and the password is the registry token. Stored as workspace secrets `MISTRAL_REGISTRY_USER` and `MISTRAL_REGISTRY_TOKEN`, they bind like this:
+
+```bash
+curl -X PATCH "https://api.mistral.ai/v1/workflows/deployments/my-app-worker" \
+  -H "Authorization: Bearer $MISTRAL_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"spec": {"backend_spec": {"type": "koyeb", "secrets": [
+        {"env_var_name": "UV_INDEX_MISTRALAI_USERNAME", "reference": "secret:workspace:MISTRAL_REGISTRY_USER"},
+        {"env_var_name": "UV_INDEX_MISTRALAI_PASSWORD", "reference": "secret:workspace:MISTRAL_REGISTRY_TOKEN"}
+      ]}}}'
+```
+
+Send the complete list, because it replaces the current bindings. `mistral apps deploy` leaves existing bindings in place when it updates the deployment. Build args persist in the image's layers and history, so bind a credential you can rotate.
+
+The repo must be readable by the platform's GitHub App connector. A push target the connector cannot see fails with `github_repository_not_found`, which is an access grant question rather than a defect in the app.
+
+## Send It Work: `workflow-start`
+
+`workflow-start` needs `MISTRAL_API_KEY` (`.env`, written by `mistral apps init`, has a blank slot for it). The `mistral login` session does not work here. It dispatches to `DEPLOYMENT_NAME`, so point it at the managed deployment:
+
+```bash
+DEPLOYMENT_NAME=my-app-worker uv run workflow-start --workflow hello_world --input '{"name": "World"}'
+```
+
+Dispatches one execution to the deployment and waits for the result. The input is validated locally against the workflow's entrypoint model before dispatch, so a bad payload fails here rather than as a failed execution on the platform. That contract requires the entrypoint to take a Pydantic model, so a bare `str` argument is rejected:
+
+```python
+from pydantic import BaseModel
+
+class HelloInput(BaseModel):
+    name: str
+
+@workflows.workflow.define(name="hello_world")
+class HelloWorkflow:
+    @workflows.workflow.entrypoint
+    async def run(self, hello: HelloInput) -> dict:
+        return await greet(hello.name)
+```
+
+`--no-wait` returns as soon as the execution is accepted; `--timeout` bounds the wait; `--input-file` (`-` for stdin) reads the payload from a file.
+
+## Checking on It
+
+The deployment's state is in the platform API:
+
+```python
+from mistralai.client import Mistral
+
+client = Mistral(api_key=...)
+d = client.workflows.deployments.get_deployment(name="my-app-worker")
+print(d.managed.status.phase)              # pending -> building -> running
+print(d.managed.status.deployed_revision)  # commit SHA the live worker is running
+```
+
+A build that fails lands on `build_failed`, with the reason in `status.message`. Build logs are not exposed through the API yet; `get_deployment_logs` returns the running worker's logs, not the build's.
+
+## The Full Loop
+
+```bash
+# 1. ship the current commit and wait for it to roll out
+git commit -m "wf: change the workflow" && git push
+mistral apps deploy
+
+# 2. prove it runs
+DEPLOYMENT_NAME=my-app-worker uv run workflow-start --workflow hello_world --input '{"name": "managed"}'
+```
+
+Every later change is step 1 again.
+

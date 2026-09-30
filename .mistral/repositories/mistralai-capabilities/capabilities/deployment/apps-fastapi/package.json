@@ -11,8 +11,8 @@
     "check-types": "tsc --noEmit"
   },
   "devDependencies": {
-    "@mistralai-capabilities/config": "workspace:*",
+    "@mistralai-capabilities/config": "file:../../../packages/config",
     "@types/bun": "^1.3.0",
-    "typescript": "catalog:"
+    "typescript": "^5"
   }
 }

@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 4,
+  "registries": [
+    {
+      "id": "mistralai-capabilities",
+      "acquisition": {
+        "type": "git",
+        "url": "git@github.com:mistralai/mistralai-capabilities.git",
+        "ref": "main",
+        "sha": "f04ba11918fa6d02a328e4dac8be78f30235c96f",
+        "descriptorPath": "registry.json",
+        "subtreePrefix": ".mistral/repositories/mistralai-capabilities"
+      }
+    }
+  ]
+}

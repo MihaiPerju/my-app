@@ -1,0 +1,51 @@
+import type { QueryClient } from "@tanstack/react-query";
+import { HeadContent, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
+import type { ReactNode } from "react";
+
+import { DEFAULT_APP_NAME } from "../app-name";
+
+import appCss from "../index.css?url";
+
+export interface RouterContext {
+  queryClient: QueryClient;
+  /** Where `/` sends the user; see `landing.ts`. */
+  landingPath: () => string | undefined;
+  /** The app's display name; see `app-name.ts`. Absent only in a test's hand-built router. */
+  appName?: string;
+}
+
+export const Route = createRootRouteWithContext<RouterContext>()({
+  head: ({ match }) => ({
+    meta: [
+      { charSet: "utf-8" },
+      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { title: match.context.appName ?? DEFAULT_APP_NAME },
+    ],
+    links: [
+      { rel: "stylesheet", href: appCss },
+      { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+    ],
+  }),
+  shellComponent: RootDocument,
+});
+
+/**
+ * The HTML document. Layout belongs in a layout route, not here: wrap pages in a pathless
+ * `routes/_<name>.tsx` so a page can opt out of it by living outside that directory.
+ *
+ * `suppressHydrationWarning` covers attributes a head script sets on `<html>` before React
+ * hydrates, such as a theme class chosen from a cookie.
+ */
+function RootDocument({ children }: { children: ReactNode }) {
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <HeadContent />
+      </head>
+      <body>
+        {children}
+        <Scripts />
+      </body>
+    </html>
+  );
+}

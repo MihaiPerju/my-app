@@ -1,0 +1,59 @@
+# The API development service, owned by the docker-compose-api integration. Included by the root
+# compose.dev.yaml when FastAPI is installed; optional service dependencies are gated below.
+
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.api
+      target: api-dev
+      args:
+        REGISTRY_PY_USER: ${MISTRAL_REGISTRY_USER:-}
+      secrets:
+        - registry_token
+    init: true
+    environment:
+      NODE_ENV: development
+{{#if (has "postgres")}}
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
+{{/if}}
+      INGESTION_S3_ENDPOINT_URL: http://bucket:9000
+      # The browser origin of the directly published web service. Derived from WEB_PORT rather
+      # than the root .env's CORS_ORIGIN, which names the host-run dev server.
+      CORS_ORIGIN: http://localhost:${WEB_PORT:-3001}
+      # In-network address, pinned: the root .env's MCP_SERVER_URL names the host (localhost), which
+      # inside this container is the container itself.
+      MCP_SERVER_URL: http://api:3000/mcp
+      MCP_APPS_ENABLED: ${MCP_APPS_ENABLED:-0}
+      HOME: /tmp
+      UV_NO_SYNC: "1"
+      WATCHFILES_FORCE_POLLING: "true"
+    env_file:
+      - path: ../../.env
+        required: false
+    volumes:
+      - ../..:/app
+      - /app/.venv
+    # Loopback-only: see the api service in compose.yaml.
+    ports:
+      - "127.0.0.1:${API_PORT:-3000}:3000"
+    depends_on:
+{{#if (has "postgres")}}
+      postgres:
+        condition: service_healthy
+{{/if}}
+      init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:3000/api/health/live').status==200 else 1)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    restart: unless-stopped

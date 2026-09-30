@@ -1,0 +1,18 @@
+{
+  "id": "docker-compose",
+  "version": "0.0.0",
+  "title": "Docker Compose",
+  "description": "Docker Compose deployment: the three generic Compose roots (canonical, development, initialization), the shared initialization aggregator, the local end-to-end smoke runbook, and the compose lifecycle tasks (up, down, build, logs, dev, smoke, init). Every per-service overlay is owned by a hidden `docker-compose-<x>` integration capability that activates when both docker-compose and its API/web/workflows/PostgreSQL/Bucket capability are effective, so a generic Compose selection carries no unrelated service overlay; the hidden `docker-compose-auth` integration owns the gateway Compose root (APISIX gateway + Keycloak IdP), the gateway image, and the gateway/realm config, included only when auth is effective. Template-only; delivered through the Git source.",
+  "kind": "deployment",
+  "categories": [
+    "solutions"
+  ],
+  "dependencies": [
+    "core"
+  ],
+  "packages": [],
+  "metadata": {
+    "weight": 40,
+    "public": false
+  }
+}

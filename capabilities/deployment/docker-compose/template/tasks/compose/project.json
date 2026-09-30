@@ -1,0 +1,39 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "compose",
+  "projectType": "library",
+  "targets": {
+    "up": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash tools/compose.sh up", "cwd": "{workspaceRoot}" }
+    },
+    "down": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash tools/compose.sh down", "cwd": "{workspaceRoot}" }
+    },
+    "dev": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash tools/compose.sh dev", "cwd": "{workspaceRoot}" }
+    },
+    "dev-down": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash tools/compose.sh dev-down", "cwd": "{workspaceRoot}" }
+    },
+    "build-images": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash tools/compose.sh build-images", "cwd": "{workspaceRoot}" }
+    },
+    "logs": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash tools/compose.sh logs", "cwd": "{workspaceRoot}" }
+    },
+    "smoke": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash tools/compose.sh smoke", "cwd": "{workspaceRoot}" }
+    },
+    "init": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash tools/compose.sh init", "cwd": "{workspaceRoot}" }
+    }
+  }
+}

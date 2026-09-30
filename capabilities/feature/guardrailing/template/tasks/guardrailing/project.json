@@ -1,0 +1,14 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "guardrailing",
+  "projectType": "library",
+  "targets": {
+    "seed-guardrail": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "bash tools/uv.sh run --no-sync python -m cli seed-guardrail",
+        "cwd": "{workspaceRoot}"
+      }
+    }
+  }
+}

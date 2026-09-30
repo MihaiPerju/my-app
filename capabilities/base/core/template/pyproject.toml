@@ -1,0 +1,68 @@
+[project]
+name = "app-workspace"
+version = "0.0.1"
+requires-python = ">=3.12,<3.15"
+dependencies = []
+
+[tool.uv]
+package = false
+# `= false` exempts a package from the `exclude-newer` cutoff. The list is every first-party
+# Mistral distribution: `exclude-newer` guards against a hostile upload landing before anyone
+# notices, a threat model that does not apply to a name Mistral publishes itself. This app's
+# private index serves no upload dates, so a non-exempt first-party dep makes uv warn ("is missing
+# an upload date, but user provided") on every sync. The `mistralai-capabilities-*` entries are the
+# capability toolkits this registry itself publishes (`<registry id>-<kind>-<capability id>`); keep them
+# in sync with the packaged capabilities in `registry.json`.
+exclude-newer-package = { mistralai = false, mistralai-evaluations = false, mistralai-guardrails = false, mistralai-search-toolkit = false, mistralai-search-toolkit-storage-s3 = false, mistralai-search-toolkit-storage-gcs = false, mistralai-search-toolkit-storage-azure = false, mistralai-workflows-plugins-evaluations = false, mistralai-workflows-plugins-search = false, mistralai-agents = false, mistralai-vibe-harness = false, mistralai-vibe-sdk = false, mistral-vibe = false, mistralai-workflows = false, mistralai-workflows-plugins-mistralai = false, mistralai-capabilities-backend-fastapi = false, mistralai-capabilities-feature-fastapi-auth = false, mistralai-capabilities-feature-fastapi-workflows-auth = false, mistralai-capabilities-feature-mcp-apps = false, mistralai-capabilities-backend-workflows = false, mistralai-capabilities-feature-agents = false, mistralai-capabilities-feature-chat = false, mistralai-capabilities-feature-evals = false, mistralai-capabilities-feature-experiments = false, mistralai-capabilities-feature-guardrailing = false, mistralai-capabilities-feature-guardrailing-eval = false, mistralai-capabilities-feature-document-annotation-ui = false, mistralai-capabilities-feature-observability = false, mistralai-capabilities-database-bucket = false, mistralai-capabilities-feature-custom-rbac = false, mistralai-capabilities-feature-search = false, mistralai-capabilities-feature-speech = false, mistralai-capabilities-deployment-apps = false }
+# Dependency-confusion hardening. Do not use `unsafe-best-match`, which uv's docs flag as exposing
+# "the risk of dependency confusion attacks": it merges candidates across indexes and takes the
+# best version, so a public upload of an unclaimed private name outranks the real release.
+index-strategy = "first-index"
+# GHSA-537c-gmf6-5ccf: cryptography wheels below 48.0.1 statically link a vulnerable OpenSSL. Use an
+# override, not a constraint: every published mistralai caps `cryptography<47.0.0`, so a constraint
+# is unsatisfiable. The payload encoder only uses `AESGCM` and `InvalidTag`, unchanged in 48.x/49.x.
+override-dependencies = ["cryptography>=48.0.1"]
+# A universal lock only guarantees a version is selectable per platform, not that a wheel exists
+# there: uv checks wheel availability only for the platform the lock is taken on. This repo locks on
+# macOS but deploys linux/x86_64 and linux/aarch64, so all three must be installable from one lock.
+# Without this, a Mac-taken lock can pick a greenlet version whose linux wheel is absent, which then
+# fails `uv sync` on the linux runner and in the Docker build.
+required-environments = [
+    "sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "sys_platform == 'linux' and platform_machine == 'aarch64'",
+]
+# There is no blanket `prerelease = "allow"`: it pulled alphas and RCs into the lock for packages
+# that never asked for one. Nothing here needs the exemption today. uv still allows a pre-release
+# for a direct specifier that names it, so a future rc pin needs no setting here.
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+default = true
+
+# `explicit = true`: consulted only for the names bound to it in `[tool.uv.sources]`. Credentials
+# come from the environment (UV_INDEX_MISTRALAI_*, see tools/uv.sh), never committed. Do not re-add
+# this host as UV_EXTRA_INDEX_URL: that makes it a general, higher-priority index, which shadows the
+# public `mistral-common` / `mistralai-vibe-sdk` / `mistralai-search-toolkit` with older copies.
+[[tool.uv.index]]
+name = "mistralai"
+url = "https://dl.cloudsmith.io/basic/mistral-ai/sdk-distribution/python/simple/"
+explicit = true
+
+# uv applies a source only where its package is a DIRECT requirement of a workspace member (an entry
+# here is inherited by every member) and silently ignores it on a transitive one. So each capability
+# binds its members' direct requirements in that member's own pyproject, next to the requirement
+# (`mistralai-guardrails` in packages/py/guardrailing, for one), and the binding ships exactly when
+# the capability is selected. The CLI adds one entry here per selected capability toolkit.
+[tool.uv.sources]
+
+# Globs, not an enumeration, so the member set follows capability selection with no hand-editing. A
+# capability's published `package/py` toolkit is not a member: the CLI wires selected toolkits into
+# root dependencies and sources. The agent project remains directory-scoped and is intentionally not
+# a root workspace member; its NX targets run its own pyproject against the shared environment.
+[tool.uv.workspace]
+members = ["apps/*", "packages/py/*"]
+# `apps/web` is the only non-Python app matched by `apps/*`.
+exclude = ["apps/web"]
+

@@ -1,0 +1,17 @@
+{
+  "id": "fastapi-workflows",
+  "version": "0.0.0",
+  "title": "FastAPI — Workflows",
+  "description": "Hidden FastAPI × workflows integration carrying API health metadata.",
+  "kind": "feature",
+  "visible": false,
+  "activatedWhen": {
+    "allOf": ["fastapi", "workflows"]
+  },
+  "categories": ["solutions"],
+  "packages": ["ts"],
+  "metadata": {
+    "weight": 2,
+    "public": false
+  }
+}

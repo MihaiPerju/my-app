@@ -1,0 +1,41 @@
+[project]
+name = "mistralai-capabilities-backend-workflows"
+version = "0.1.0"
+description = "The workflows capability's toolkit: the SDK execution boundary the app imports (`client`, `encryption`) plus a command-line entry point that dispatches one execution against a running worker (workflow-start)."
+requires-python = ">=3.12,<3.15"
+license = "LicenseRef-Proprietary"
+dependencies = [
+    # client.py: the `mistralai.client.*` execution API. The floor stays below 2.10 so one app can
+    # share a single `mistralai` with the `search` capability's toolkit, which caps `mistralai<2.10`.
+    # encryption.py: the capability defaults WORKFLOWS_ENCRYPTION_MODE=partial, and the SDK's payload
+    # encoder raises ImportError at worker start without `cryptography`, which only this extra pulls
+    # in. Declared here, not left to a sibling: an app without `search` has no other path to it.
+    "mistralai[workflow-payload-encryption]>=2.9.4",
+    # client.py / encryption.py: `mistralai.workflows` + `mistralai.extra.workflows` (the SDK
+    # execution, config, and payload-encoding surface). start.py: `discover_all_workflows_in_package`
+    # / `get_workflow_definition`.
+    "mistralai-workflows>=3.10.0",
+    # client.py: the request/response models it re-exports and validates. start.py: validates the
+    # dispatch input against the entrypoint model before it leaves.
+    "pydantic>=2",
+    # encryption.py / start.py: structured logging, configured through the app's `utils.logging`.
+    "structlog>=25",
+]
+
+[build-system]
+requires = ["uv_build>=0.8.22,<0.9.0"]
+build-backend = "uv_build"
+
+# Installed with the capability, this becomes `uv run workflow-start` in a generated app. The
+# toolkit (the `workflow-start` command and the `client` / `encryption` modules)
+# imports the app's `worker.workflows` / `utils` / `env` packages (present whenever the capability is
+# selected), not sibling capability toolkits, so no capability.json edge is implied.
+[project.scripts]
+workflow-start = "mistralai_capabilities.workflows.cli.start:main"
+
+[tool.uv.build-backend]
+# The dist name is fixed by the CLI convention (= `<registry id>-<kind>-<capability id>`);
+# `module-name` decouples the IMPORT path from it. `namespace = true` makes this a PEP-420
+# portion so it ships only the `mistralai_capabilities.workflows` slice alongside the sibling caps.
+module-name = "mistralai_capabilities.workflows"
+namespace = true

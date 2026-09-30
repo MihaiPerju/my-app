@@ -1,0 +1,58 @@
+# The workflows service, owned by the docker-compose-workflows integration. Included by the root
+# compose.yaml when workflows is installed; shared init/gateway/bucket come from the root Compose
+# capability.
+
+services:
+  workflows:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.worker
+      target: workflows
+      args:
+        REGISTRY_PY_USER: ${MISTRAL_REGISTRY_USER:-}
+      secrets:
+        - registry_token
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    env_file:
+      # Keep Workflow tracing opt-in without masking the generated root .env. Compose applies
+      # env_file entries in order, so Observability's OTEL_ENABLED=true wins when present.
+      - path: workflows.defaults.env
+      - path: ../../.env
+        required: false
+    environment:
+{{#if (has "observability")}}      # Workflows owns the global provider; SDK spans must join it.
+      MISTRAL_SDK_TELEMETRY: "global"
+{{/if}}
+{{#if (has "postgres")}}      DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
+      SEARCH_BACKEND: postgres
+{{/if}}      # Encryption mode comes from ../../.env, shared with api — see the note there.
+      HEALTH_SERVER_HOST: 127.0.0.1
+      HEALTH_SERVER_PORT: "3001"
+      # The worker's sandbox module discovery imports the nuage_v2 (Agents SDK) plugin, whose vibe
+      # dependency creates ~/.vibe at import; the rootfs is read-only, so point HOME at the tmpfs.
+      HOME: /tmp
+    depends_on:
+{{#if (has "postgres")}}      postgres:
+        condition: service_healthy
+{{/if}}      init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:3001/health', timeout=5).status==200 else 1)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped

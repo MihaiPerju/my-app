@@ -1,0 +1,43 @@
+x-infra-security: &infra-security
+  security_opt:
+    - no-new-privileges:true
+
+volumes:
+  pg_data:
+
+services:
+  postgres:
+    # The HA image ships `vector` (pgvector) beside TimescaleDB, which the search chunk
+    # table's halfvec column and HNSW index need. Exact pg/ts pin; amd64 + arm64.
+    image: timescale/timescaledb-ha:pg18.4-ts2.29.0
+    init: true
+    <<: *infra-security
+    ports:
+      # Host port configurable (default 5432) so the stack can run alongside a
+      # local postgres already bound to 5432. Container port is always 5432;
+      # in-cluster services connect via the `postgres` service name.
+      # Loopback-only: the credentials here are the well-known dev defaults, so an
+      # 0.0.0.0 bind would hand the whole database to anyone on the same network.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      # timescaledb-ha keeps PGDATA at /home/postgres/pgdata/data (NOT the stock
+      # /var/lib/postgresql/data) and runs as uid 1000. Mounting the parent
+      # directory lets the entrypoint own both `data` and its `backup` sibling.
+      - pg_data:/home/postgres/pgdata
+      # Mounted as a single FILE, deliberately. The image ships its own
+      # 000_install_timescaledb.sh / 001_timescaledb_tune.sh /
+      # 010_install_timescaledb_toolkit.sh in this directory, and bind-mounting the
+      # whole directory would shadow all three — losing the timescaledb extension
+      # and its memory tuning. The 020- prefix sorts after them.
+      - ../docker/postgres/init/00-extensions.sql:/docker-entrypoint-initdb.d/020-extensions.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -h 127.0.0.1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    restart: unless-stopped

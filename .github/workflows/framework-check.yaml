@@ -1,0 +1,178 @@
+name: Framework check
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 1
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.0
+      - name: Cache Turbo
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ github.sha }}
+          restore-keys: ${{ runner.os }}-turbo-
+      - name: Guard against private-host URLs in bun.lock
+        run: |
+          if grep -nE 'https://' bun.lock | grep -v 'registry\.npmjs\.org'; then
+            echo "::error::bun.lock contains non-npmjs registry URLs (private-host leak)"; exit 1
+          fi
+      # Same guard for the Python lock, and it runs before install: catch a rewritten lock before
+      # anything resolves from it. uv reads `UV_DEFAULT_INDEX` and `UV_INDEX_URL` from the
+      # environment, and both outrank this project's `[[tool.uv.index]]`. One `uv lock` in a shell
+      # set for the Socket mirror rewrites all source URLs without changing this repo. Only pypi.org,
+      # its CDN, and the one private index this repo declares may appear.
+      - name: Guard against proxied URLs in uv.lock
+        run: |
+          if grep -noE 'https://[^/"]+' uv.lock \
+            | grep -vE 'https://(pypi\.org|files\.pythonhosted\.org|pypi\.fury\.io)$'; then
+            echo "::error::uv.lock resolves through an undeclared host (proxy/private-host leak)"; exit 1
+          fi
+      - name: Install workspace dependencies
+        run: bun install --frozen-lockfile
+      - name: Lint (oxlint)
+        run: bun run lint
+      - name: Format check (oxfmt)
+        run: bun run format:check
+      - name: Registry descriptor up to date
+        run: bun run registry:check
+      - name: README capabilities table up to date
+        run: bun run docs:check
+      # No generated-app e2e here (`mistral apps init` + `docker build`), which is what catches
+      # the deps-stage COPY globs missing the vendored workspace members. That check is not
+      # missing, it is a separate workflow: `generated-app-e2e.yaml` runs it on every PR, and
+      # takes 15-20 min. This job stays fast, so the guard below covers the one regression that
+      # is checkable without generating an app.
+      - name: Vendored-tree COPY sources must be globs, never literals
+        # One Dockerfile serves both acquisition modes because these paths are wildcards. In git
+        # mode they match the committed subtree. In npm/Cloudsmith mode `.mistral/repositories/`
+        # does not exist, and a COPY whose wildcard matches nothing is skipped. A missing literal
+        # path is a hard error, so a literal path breaks every registry-mode build and the source
+        # app's e2e. Only `^COPY` lines are inspected.
+        run: |
+          if grep -hE '^COPY' capabilities/*/*/template/deploy/docker/Dockerfile.* \
+             | grep -E '\.mistral/repositories/[^*]'; then
+            echo "::error::vendored COPY source is a literal path; it must be globbed (.mistral/repositories/*/...)"
+            exit 1
+          fi
+      - name: Vendored capability COPY globs must match the nested <kind>/<id> layout
+        # Every capability root now lives at `capabilities/<kind>/<id>`, so a vendored COPY into a
+        # `package/` zone needs one wildcard for the kind AND one for the capability
+        # (`capabilities/*/*/package/...`). The obsolete one-level `capabilities/*/package/...` glob
+        # matches no root, so `uv sync` silently omits those path deps in git-mode container builds.
+        # Reject a `capabilities/*/package` glob (exactly one segment before `package`).
+        run: |
+          if grep -hE '^COPY' capabilities/*/*/template/deploy/docker/Dockerfile.* \
+             | grep -E 'capabilities/\*/package'; then
+            echo "::error::vendored capability COPY glob is one-level (capabilities/*/package); the nested layout needs capabilities/*/*/package"
+            exit 1
+          fi
+      - name: Type-check every workspace package
+        run: bun run check-types
+      - name: Unit tests
+        timeout-minutes: 8
+        run: bun run test
+      # Gated: `cargo check` fails on the empty (members=[]) workspace, so both language checks are
+      # guarded on the presence of a real member.
+      - name: Set up uv
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          # Same uv the template pins into every generated app. Unpinned, this job resolved whatever
+          # uv shipped that week and validated the Python workspace with a resolver the app never
+          # runs. tests/registry asserts the two agree.
+          version: "0.11.17"
+      - name: Lint capability Python templates (composed ruff)
+        # Capability templates are overlays: `env` gets `_base.py` from base/core and `gateway.py`
+        # from deployment/apps. Ruff classifies first-party imports correctly only on the composed
+        # tree, so a template import-sort slip is invisible until the 15-20 min generated-app-e2e
+        # runs `nx run quality:lint`. This reassembles the templates and runs the same `ruff check`
+        # in seconds (via `uvx ruff`, using the code-quality `ruff.toml`), catching it in the fast lane.
+        run: bun run lint:templates
+      - name: Format-check capability TS/markdown templates (composed oxfmt)
+        # Same idea for the app's `quality:check-ts` formatter step: rebuild the templates' union of
+        # `apps/` and `packages/`, then run the code-quality-pinned `oxfmt --check` in seconds.
+        run: bun run fmt:templates
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # branch stable
+        with:
+          components: rustfmt, clippy
+      - name: Capability Python parses on the 3.12 floor
+        # The requires-python floor is >=3.12, but .python-version, the generated containers, and the
+        # gated uv step below all run 3.14 — so nothing else here catches 3.14-only syntax (e.g. PEP
+        # 758's unparenthesized `except A, B:`) landing in a capability and silently breaking the 3.12
+        # promise. Byte-compiling every capability .py under 3.12 is a cheap, credential-free guard,
+        # and it reaches the template trees the root uv workspace never installs.
+        run: |
+          uv python install 3.12
+          "$(uv python find 3.12)" -m compileall -q -x '/(node_modules|\.venv|dist|build|__pycache__)/' capabilities
+      - name: Python workspace check (uv, gated)
+        # The lock resolves from public PyPI only, so this step needs no index credentials.
+        #
+        # UV_EXCLUDE_NEWER must match the span the lock was taken under, or `--locked` fails on a
+        # green tree. uv records the global cutoff in uv.lock (`exclude-newer-span = "P2D"`); with
+        # no cutoff set it reports "Resolving despite existing lockfile due to removal of global
+        # exclude newer", re-resolves, and rejects the lock. Mistral dev shells export this, and
+        # the root pyproject notes Socket Firewall is meant to supply it in CI — it does not reach
+        # this job, which is why every PR here failed on a lockfile nobody had changed.
+        env:
+          UV_EXCLUDE_NEWER: "2 days"
+        run: |
+          found=""
+          for d in capabilities/*/*/package/py; do
+            [ -d "$d" ] && [ -f "${d%/package/py}/capability.json" ] && found=1
+          done
+          if [ -n "$found" ]; then
+            # Prove the universal lock installs on the >=3.12 floor.
+            uv sync --locked -p 3.12
+          else
+            echo "no python capability members yet — skipping uv sync"
+          fi
+      - name: Rust workspace manifest validity (cheap, unconditional)
+        run: cargo metadata --no-deps >/dev/null
+      - name: Rust workspace check (cargo, gated)
+        run: |
+          found=""
+          for d in capabilities/*/*/package/rs; do
+            [ -d "$d" ] && [ -f "${d%/package/rs}/capability.json" ] && found=1
+          done
+          if [ -n "$found" ]; then
+            cargo fmt --check && cargo check --workspace
+          else
+            echo "no rust capability members yet — skipping cargo fmt/check"
+          fi
+
+  public-artifacts:
+    name: Public artifact contents
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          version: "0.11.17"
+      - name: Install workspace dependencies
+        run: bun install --frozen-lockfile
+      - name: Build and inspect public-candidate artifacts
+        run: bun run public-artifacts:check

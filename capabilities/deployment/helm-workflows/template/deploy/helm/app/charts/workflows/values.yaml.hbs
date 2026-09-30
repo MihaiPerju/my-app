@@ -1,0 +1,45 @@
+# Off by default; the umbrella sets `workflows.enabled: true` only when the `workflows` capability is selected.
+enabled: false
+replicaCount: 1
+image:
+  repository: "docker/solutions/{{projectName}}-python"
+  tag: ""
+  pullPolicy: ""
+ports:
+  enabled: false
+command: ["sh", "-c", "exec uv run --frozen --no-dev --no-sync --directory apps/worker python -m worker.entrypoints.worker"]
+args: []
+env:
+  APP_NAME: "workflows"
+  # The umbrella chart overrides this to true when Observability is selected. Keep the worker's
+  # Workflow SDK tracing opt-in instead of inheriting the SDK's enabled-by-default setting.
+  OTEL_ENABLED: "false"
+  UV_CACHE_DIR: "/tmp/uv-cache"
+  # The worker imports the nuage_v2 (Agents SDK) plugin during sandbox discovery; its vibe
+  # dependency creates ~/.vibe at import, so HOME must be writable.
+  HOME: "/tmp"
+  LOG_FORMAT: "json"
+  SEARCH_BACKEND: "postgres"
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+writableVolumes:
+  - name: tmp
+    mountPath: /tmp
+# Worker autoscaling is off by default (workers scale via task-queue backlog,
+# not CPU). CPU-target HPA is provided for optional use.
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+podSecurityContext: {}
+containerSecurityContext: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+podAnnotations: {}

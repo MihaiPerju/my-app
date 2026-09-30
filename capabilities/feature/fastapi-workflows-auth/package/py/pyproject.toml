@@ -1,0 +1,24 @@
+[project]
+name = "mistralai-capabilities-feature-fastapi-workflows-auth"
+version = "0.1.0"
+description = "The authenticated FastAPI workflow-execution surface: WorkflowRouter, execution commands and ownership, and the Postgres execution-store adapter."
+requires-python = ">=3.12,<3.15"
+license = "LicenseRef-Proprietary"
+dependencies = ["mistralai>=2.9.4", "mistralai-workflows>=3.10.0", "pydantic>=2"]
+
+# An optional extra rather than a base dependency: only the API host imports FastAPI. Keeping the
+# web framework out of the base distribution lets a worker install the toolkit without loading it.
+[project.optional-dependencies]
+fastapi = ["fastapi>=0.115"]
+
+[build-system]
+requires = ["uv_build>=0.8.22,<0.9.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+# The dist name is fixed by the CLI convention (= `<registry id>-<kind>-<capability id>`);
+# `module-name` decouples the IMPORT path from it. `namespace = true` makes this a PEP-420
+# portion so it ships only the `mistralai_capabilities.fastapi_workflows_auth` slice alongside the
+# sibling caps.
+module-name = "mistralai_capabilities.fastapi_workflows_auth"
+namespace = true

@@ -1,0 +1,28 @@
+{
+  "id": "bucket",
+  "version": "0.0.0",
+  "title": "Bucket",
+  "description": "Bucket: an S3-compatible local object-storage backend powered by the upstream RustFS image, whose Docker Compose overlay ships with the docker-compose capability.",
+  "kind": "database",
+  "categories": [
+    "solutions"
+  ],
+  "dependencies": [
+    "core"
+  ],
+  "packages": [
+    "ts",
+    "py"
+  ],
+  "envVars": {
+    "INGESTION_STORAGE_BACKEND": "s3",
+    "INGESTION_S3_ENDPOINT_URL": "http://127.0.0.1:9000",
+    "INGESTION_S3_BUCKET": "ingest",
+    "INGESTION_S3_ACCESS_KEY_ID": "bucketadmin",
+    "INGESTION_S3_SECRET_ACCESS_KEY": "bucketadmin"
+  },
+  "metadata": {
+    "weight": 15,
+    "public": false
+  }
+}

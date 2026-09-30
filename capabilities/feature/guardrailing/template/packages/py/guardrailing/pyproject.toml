@@ -1,0 +1,20 @@
+[project]
+name = "guardrailing"
+version = "0.0.1"
+requires-python = ">=3.12,<3.15"
+dependencies = [
+    # The Guardrails SDK, imported by this capability's toolkit (mistralai_capabilities.guardrails).
+    # It lives on a workspace MEMBER, not the toolkit: the SDK is private (404 on public PyPI) and uv
+    # applies a `[tool.uv.sources]` binding to DIRECT requirements only. A toolkit dependency,
+    # transitive from the app's view, would be looked up on public PyPI and fail to resolve. This
+    # member's binding below reaches its direct requirement, so the SDK resolves from whichever
+    # private index the app's `mistralai` entry points at. This member ships only with the
+    # guardrailing capability, so `uv sync --all-packages` installs the SDK exactly when it is
+    # selected (the same arrangement as packages/py/agents).
+    "mistralai-guardrails[pgvector]==3.0.0",
+]
+
+# The only index allowed to serve the name. It returns 404 on public PyPI, so the name is unclaimed
+# and squattable; binding it to the root's `mistralai` index makes a public upload unreachable.
+[tool.uv.sources]
+mistralai-guardrails = { index = "mistralai" }

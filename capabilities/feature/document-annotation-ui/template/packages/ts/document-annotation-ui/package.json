@@ -1,0 +1,10 @@
+{
+  "name": "@app/document-annotation-ui",
+  "private": true,
+  "version": "0.0.1",
+  "//": "Dependency-only workspace member: it exists only when document-annotation-ui is selected, and carries the PDF viewer pins apps/web imports. The published capability package imports neither, so they are not its dependencies. The app links hoisted, so apps/web resolves them from the root node_modules. pdf.js refuses a worker of another version, so bump `pdfjs-dist` together with `apps/web/public/pdf.worker.min.mjs` (see INSTALL.md).",
+  "dependencies": {
+    "pdfjs-dist": "5.4.296",
+    "react-pdf": "10.4.1"
+  }
+}

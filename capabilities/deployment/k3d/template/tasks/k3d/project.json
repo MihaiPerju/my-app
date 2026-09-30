@@ -1,0 +1,15 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "k3d",
+  "projectType": "library",
+  "targets": {
+    "up": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash tools/k3d-up.sh", "cwd": "{workspaceRoot}" }
+    },
+    "down": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash tools/k3d-down.sh", "cwd": "{workspaceRoot}" }
+    }
+  }
+}

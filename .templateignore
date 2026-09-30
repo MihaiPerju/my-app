@@ -1,0 +1,28 @@
+# template/ mirrors the scaffolded app: every file is vendored to ~/<path>.
+# This is the single source of truth for what is NOT vendored. Gitignore
+# syntax, matched against each candidate's path relative to the capability's
+# template/. `!` negation is supported.
+
+# Package-only composition / generated — no app target.
+/api.server.ts
+/routes.gen.ts
+
+# NOTE: the scaffolded default also excluded `__tests__/`, `*.test.*`,
+# `*.spec.*` and `*.d.ts`. This registry deliberately vendors them: it
+# reproduces a real application whose test suite and ambient type
+# declarations (e.g. apps/web/src/types/*.d.ts) are part of the app, not
+# dev-only scaffolding. Excluding them silently drops ~80 real files.
+
+# Never copied.
+node_modules/
+.templateignore
+
+# Residue from running a Python tool inside a template zone. Untracked, so a git-vendored app
+# never sees it, but `template-inventory.gen.ts` walks the filesystem — without this the pinned
+# inventory depends on whether someone happened to import a template module or point ruff at
+# `capabilities/` locally, and CI then fails on an inventory it cannot reproduce.
+__pycache__/
+*.pyc
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/

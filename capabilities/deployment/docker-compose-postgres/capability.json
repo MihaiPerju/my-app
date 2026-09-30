@@ -1,0 +1,25 @@
+{
+  "id": "docker-compose-postgres",
+  "version": "0.0.0",
+  "title": "Docker Compose — Postgres",
+  "description": "Docker Compose × Postgres integration. Owns the PostgreSQL service overlay (deploy/compose/compose.postgres.yaml) that the Compose roots include when Postgres is deployed with Compose. Hidden: it activates automatically when both docker-compose and postgres are effective, and selecting it directly is shorthand for that pair. Template-only; delivered through the Git source.",
+  "kind": "deployment",
+  "visible": false,
+  "activatedWhen": {
+    "allOf": [
+      "docker-compose",
+      "postgres"
+    ]
+  },
+  "categories": [
+    "solutions"
+  ],
+  "packages": [],
+  "envVars": {
+    "POSTGRES_PORT": "5432"
+  },
+  "metadata": {
+    "weight": 44,
+    "public": false
+  }
+}

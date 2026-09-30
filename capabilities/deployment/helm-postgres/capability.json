@@ -1,0 +1,22 @@
+{
+  "id": "helm-postgres",
+  "version": "0.0.0",
+  "title": "Helm — Postgres",
+  "description": "Helm × Postgres integration. Owns the in-cluster Postgres subchart at deploy/helm/app/charts/postgres. Hidden: it activates automatically when both helm and postgres are effective, and selecting it directly is shorthand for that pair. Template-only; delivered through the Git source.",
+  "kind": "deployment",
+  "visible": false,
+  "activatedWhen": {
+    "allOf": [
+      "helm",
+      "postgres"
+    ]
+  },
+  "categories": [
+    "solutions"
+  ],
+  "packages": [],
+  "metadata": {
+    "weight": 52,
+    "public": false
+  }
+}

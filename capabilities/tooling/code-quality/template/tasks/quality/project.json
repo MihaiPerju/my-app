@@ -1,0 +1,56 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "quality",
+  "projectType": "library",
+  "targets": {
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash tools/quality.sh lint", "cwd": "{workspaceRoot}" }
+    },
+    "fmt": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash tools/quality.sh fmt", "cwd": "{workspaceRoot}" }
+    },
+    "fmt-check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash tools/quality.sh fmt-check", "cwd": "{workspaceRoot}" }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash tools/quality.sh typecheck", "cwd": "{workspaceRoot}" }
+    },
+    "audit": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash tools/quality.sh audit", "cwd": "{workspaceRoot}" }
+    },
+    "lint-shell": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash tools/quality.sh lint-shell", "cwd": "{workspaceRoot}" }
+    },
+    "lint-docker": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash tools/quality.sh lint-docker", "cwd": "{workspaceRoot}" }
+    },
+    "check-ts": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash tools/quality.sh check-ts", "cwd": "{workspaceRoot}" }
+    },
+    "fix": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash tools/quality.sh fix", "cwd": "{workspaceRoot}" }
+    },
+    "check": {
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "lint",
+        "fmt-check",
+        "typecheck",
+        "audit",
+        "lint-shell",
+        "lint-docker",
+        "check-ts"
+      ],
+      "options": { "command": "echo '[check] quality gate passed'", "cwd": "{workspaceRoot}" }
+    }
+  }
+}

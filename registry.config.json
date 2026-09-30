@@ -1,0 +1,61 @@
+{
+  "id": "mistralai-capabilities",
+  "sources": {
+    "ts": "https://npm.cloudsmith.io/mistral-ai/sdk-distribution/",
+    "py": "https://dl.cloudsmith.io/basic/mistral-ai/sdk-distribution/python/simple/",
+    "git": "git+https://github.com/mistralai/mistralai-capabilities.git"
+  },
+  "kinds": [
+    {
+      "id": "base",
+      "title": "Application base",
+      "description": "The required workspace substrate every generated app is built on.",
+      "weight": 0,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "id": "frontend",
+      "title": "Frontend",
+      "description": "The app's user interface. At most one may be selected.",
+      "weight": 10,
+      "min": 0,
+      "max": 1
+    },
+    {
+      "id": "backend",
+      "title": "Backends",
+      "description": "Server-side runtimes: the HTTP API surface and the durable worker.",
+      "weight": 20,
+      "min": 0
+    },
+    {
+      "id": "database",
+      "title": "Databases",
+      "description": "Backing data services a capability can depend on: persistence and object storage.",
+      "weight": 30,
+      "min": 0
+    },
+    {
+      "id": "feature",
+      "title": "Features",
+      "description": "The product capabilities an app can offer, each pulling in the runtimes and services it needs.",
+      "weight": 40,
+      "min": 0
+    },
+    {
+      "id": "deployment",
+      "title": "Deployment",
+      "description": "Where the generated app runs, and the orchestration files that get it there.",
+      "weight": 50,
+      "min": 1
+    },
+    {
+      "id": "tooling",
+      "title": "Tooling",
+      "description": "Optional repository development workflows: quality, testing, automation, and editor setup.",
+      "weight": 60,
+      "min": 0
+    }
+  ]
+}

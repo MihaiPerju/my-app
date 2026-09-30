@@ -1,0 +1,17 @@
+{
+  "id": "fastapi-postgres",
+  "version": "0.0.0",
+  "title": "FastAPI — Postgres",
+  "description": "Hidden FastAPI × Postgres integration carrying database health and shutdown hooks.",
+  "kind": "feature",
+  "visible": false,
+  "activatedWhen": {
+    "allOf": ["fastapi", "postgres"]
+  },
+  "categories": ["solutions"],
+  "packages": ["ts"],
+  "metadata": {
+    "weight": 2,
+    "public": false
+  }
+}

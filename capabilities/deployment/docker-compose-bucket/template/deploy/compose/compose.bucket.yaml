@@ -1,0 +1,65 @@
+# Bucket: an S3-compatible object store for the `s3` ingestion backend locally, powered by the
+# upstream RustFS image. Included by compose.dev.yaml (`bunx nx run compose:dev`), so it always
+# comes up with the local stack.
+#
+# The worker runs in a container and reaches it over the compose network as bucket:9000. The SDK's
+# S3 client sets endpoint_url, so botocore uses path-style addressing, which RustFS (the upstream
+# image) requires because it has no per-bucket DNS. The published 127.0.0.1:${BUCKET_PORT:-9000} is for
+# host-side tools; moving it means moving INGESTION_S3_ENDPOINT_URL in the root .env with it.
+
+volumes:
+  bucket_data:
+
+services:
+  bucket:
+    image: rustfs/rustfs:1.0.0-beta.11
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    command: ["/data"]
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-bucketadmin}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-bucketadmin}
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+      # A single named volume is one disk; skip the multi-disk topology check.
+      RUSTFS_UNSAFE_BYPASS_DISK_CHECK: "true"
+    volumes:
+      - bucket_data:/data
+    # Loopback-only, like every other service here: the native worker reaches it on the host,
+    # the containerized worker reaches it over the compose network as `bucket:9000`.
+    ports:
+      - "127.0.0.1:${BUCKET_PORT:-9000}:9000"
+      - "127.0.0.1:${BUCKET_CONSOLE_PORT:-9001}:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+
+  # One-shot: create the ingestion bucket and mirror the local ./ingest corpus into it, so the
+  # same directory used by the filesystem backend also seeds the S3 backend. Both steps are
+  # idempotent (and mirror --remove keeps the bucket in sync), so it re-runs on every `up`.
+  bucket-setup:
+    # RustFS's own S3 CLI provides mc-compatible alias, bucket, and mirror commands.
+    image: rustfs/rc:v0.1.36
+    depends_on:
+      bucket:
+        condition: service_healthy
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-bucketadmin}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-bucketadmin}
+      INGESTION_S3_BUCKET: ${INGESTION_S3_BUCKET:-ingest}
+    volumes:
+      - ../../ingest:/ingest:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        rc alias set bucket http://bucket:9000 "$$RUSTFS_ACCESS_KEY" "$$RUSTFS_SECRET_KEY" &&
+        rc mb --ignore-existing "bucket/$$INGESTION_S3_BUCKET" &&
+        rc mirror --overwrite --remove /ingest "bucket/$$INGESTION_S3_BUCKET" &&
+        echo "bucket-setup: bucket '$$INGESTION_S3_BUCKET' synced from ./ingest"
+    restart: "no"

@@ -1,0 +1,21 @@
+[project]
+name = "mistralai-capabilities-feature-observability"
+version = "0.1.0"
+description = "Telemetry dependencies for the Mistral Apps Observability capability."
+requires-python = ">=3.12,<3.15"
+license = "LicenseRef-Proprietary"
+dependencies = ["mistralai[telemetry]>=2.9.4,<3"]
+
+[build-system]
+requires = ["uv_build>=0.8.22,<0.9.0"]
+build-backend = "uv_build"
+
+[tool.uv]
+exclude-newer = "7 days"
+
+[tool.uv.build-backend]
+# The dist name is fixed by the CLI convention (= `<registry id>-<kind>-<capability id>`);
+# `module-name` decouples the import path from it. `namespace = true` makes this a PEP-420
+# portion so it ships only the `mistralai_capabilities.observability` slice alongside sibling caps.
+module-name = "mistralai_capabilities.observability"
+namespace = true

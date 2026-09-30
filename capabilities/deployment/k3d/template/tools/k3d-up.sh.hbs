@@ -1,0 +1,194 @@
+#!/usr/bin/env bash
+#
+# Stand the umbrella chart up on a local k3d cluster and prove it serves a login.
+#
+# `helm lint` and `kubeconform` cannot see runtime failures: hook ordering, a read-only
+# rootfs, a NetworkPolicy that drops the database, a missing env var. This run finds them.
+#
+# Coexists with `bunx nx run compose:dev`: compose owns 9080/8081, this owns 8080/8082.
+#
+#   app       http://localhost:8080   (ingress-nginx -> APISIX -> api/web)
+#   keycloak  http://localhost:8082   (NodePort 31082, log in as dev / dev)
+#
+set -euo pipefail
+
+CLUSTER="${K3D_CLUSTER:-scapp}"
+NS="${K3D_NAMESPACE:-scapp}"
+RELEASE="${K3D_RELEASE:-scapp}"
+APP_PORT="${K3D_APP_PORT:-8080}"
+KC_PORT="${K3D_KEYCLOAK_PORT:-8082}"
+KC_NODEPORT=31082
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CHART="$REPO_ROOT/deploy/helm/app"
+VALUES="$REPO_ROOT/deploy/k3d/values-local.yaml"
+# Source the uv wrapper for this app's registry variant, exactly as tools/compose.sh does for its
+# Docker build args: it pins MISTRAL_REGISTRY_USER to the Basic-auth username of the index this app
+# was generated against (an app generated against an authenticated index needs that index's own
+# username, not a hardcoded default) and resolves the pull token from the environment or .env
+# (MISTRAL_REGISTRY_TOKEN, or GEMFURY_PULL_TOKEN for an app generated before the rename). Safe to
+# source: it runs uv only when invoked directly.
+. "$REPO_ROOT/tools/uv.sh"
+# Guarantee the BuildKit secret's env var exists even when no token is configured; the Dockerfile
+# guards on the mounted file, so an empty secret is fine.
+export MISTRAL_REGISTRY_TOKEN="${MISTRAL_REGISTRY_TOKEN:-}"
+# App services present in this app, gated like the Compose includes and Helm dependencies. Each row
+# is `image:target`; each service builds its own runtime Dockerfile (api -> Dockerfile.api,
+# workflows -> Dockerfile.worker, web -> Dockerfile.web).
+SERVICES=({{#if (has "fastapi")}}api:api {{/if}}{{#if (has "workflows")}}workflows:workflows {{/if}}{{#if (has "tanstack-start")}}web:runtime {{/if}})
+
+log() { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
+die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
+
+for bin in k3d kubectl helm docker; do
+  command -v "$bin" >/dev/null 2>&1 || die "$bin is required but not installed"
+done
+[ -n "${MISTRAL_API_KEY:-}" ] || die "MISTRAL_API_KEY must be set (the init Jobs call the Mistral API)"
+
+log "cluster"
+if k3d cluster list "$CLUSTER" >/dev/null 2>&1; then
+  echo "    $CLUSTER already exists, reusing it"
+else
+  # Traefik off: the chart declares ingressClassName: nginx, so the local run uses the same
+  # ingress as production. The second mapping reaches Keycloak through a NodePort, so no
+  # extra hostname must resolve.
+  k3d cluster create "$CLUSTER" \
+    --k3s-arg "--disable=traefik@server:*" \
+    -p "${APP_PORT}:80@loadbalancer" \
+    -p "${KC_PORT}:${KC_NODEPORT}@loadbalancer" \
+    --wait
+fi
+kubectl config use-context "k3d-$CLUSTER" >/dev/null
+
+log "ingress-nginx"
+if ! kubectl -n ingress-nginx get deploy ingress-nginx-controller >/dev/null 2>&1; then
+  helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx >/dev/null 2>&1 || true
+  helm repo update ingress-nginx >/dev/null
+  helm install ingress-nginx ingress-nginx/ingress-nginx \
+    -n ingress-nginx --create-namespace \
+    --set controller.service.type=LoadBalancer \
+    --wait --timeout 5m
+else
+  echo "    already installed"
+fi
+kubectl -n ingress-nginx rollout status deploy/ingress-nginx-controller --timeout=5m
+
+log "build runtime images"
+# The :latest tags compose produces are DEV targets (hot reload, writable rootfs) and fail
+# under the chart's read-only rootfs, so the cluster gets :runtime instead.
+# Guard the expansion: an empty "${SERVICES[@]}" is an unbound-variable error under
+# `set -u` on bash 3.2 (macOS).
+if (( ${#SERVICES[@]} > 0 )); then
+  for service in "${SERVICES[@]}"; do
+    svc="${service%%:*}"
+    target="${service#*:}"
+    case "$svc" in
+      api) dockerfile="$REPO_ROOT/deploy/docker/Dockerfile.api" ;;
+      workflows) dockerfile="$REPO_ROOT/deploy/docker/Dockerfile.worker" ;;
+      web) dockerfile="$REPO_ROOT/deploy/docker/Dockerfile.web" ;;
+    esac
+    # The Python images take the private-index HTTP Basic user as a build arg, like Compose does;
+    # web (a Node image) does not. `${py_user:+...}` expands to nothing when it is empty, which
+    # also holds under bash 3.2, where an empty array would trip `set -u`.
+    py_user=""
+    [ "$svc" = web ] || py_user="REGISTRY_PY_USER=${MISTRAL_REGISTRY_USER:-}"
+    # The web bundle bakes in the app's display name; the root .env holding it is not in the build
+    # context, so it goes in as a build arg (an exported APP_NAME wins over the file).
+    app_name=""
+    if [ "$svc" = web ]; then
+      app_name="${APP_NAME:-}"
+      if [ -z "$app_name" ] && [ -f "$REPO_ROOT/.env" ]; then
+        # Tolerates `export APP_NAME=...`, CRLF line ends, and a value in matching quotes (kept
+        # verbatim, apostrophes and `#` included) or bare with a trailing ` # comment`.
+        app_name="$(sed -n -E 's/^(export[[:space:]]+)?APP_NAME=//p' "$REPO_ROOT/.env" | tail -n 1 |
+          tr -d '\r' | sed -E -e "s/^\"(.*)\"[[:space:]]*(#.*)?$/\1/;t" -e "s/^'(.*)'[[:space:]]*(#.*)?$/\1/;t" \
+            -e 's/[[:space:]]+#.*$//')"
+      fi
+    fi
+    DOCKER_BUILDKIT=1 docker build --target "$target" \
+      -f "$dockerfile" \
+      -t "app-$svc:runtime" \
+      --secret id=registry_token,env=MISTRAL_REGISTRY_TOKEN \
+      ${py_user:+--build-arg "$py_user"} \
+      ${app_name:+--build-arg "APP_NAME=$app_name"} \
+      "$REPO_ROOT" >/dev/null
+    echo "    built app-$svc:runtime"
+  done
+fi
+
+log "import images"
+# `k3d image import <name>` runs `docker save` without a platform. Docker Desktop's containerd
+# store then emits attestation manifests whose digests are not in the tar. ctr rejects it but
+# k3d still prints "Successfully imported", so the cluster keeps a stale image. Save one
+# explicit platform to a tar to avoid this. Use `uname -m` for the arch because a Go template
+# format string cannot survive a Handlebars (.hbs) file.
+ARCH="linux/$(uname -m | sed 's/aarch64/arm64/;s/x86_64/amd64/')"
+if (( ${#SERVICES[@]} > 0 )); then
+  for svc in "${SERVICES[@]}"; do
+    img="app-$svc:runtime"
+    tar="$(mktemp -t "k3d-$svc.XXXXXX").tar"
+    docker save --platform "$ARCH" -o "$tar" "$img"
+    k3d image import -c "$CLUSTER" "$tar" >/dev/null
+    rm -f "$tar"
+    echo "    imported $img"
+  done
+fi
+
+log "keycloak"
+kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+# k3d-auth owns the realm copy under deploy/k3d (present because k3d depends on auth), so a k3d
+# selection stays independent of the docker-compose realm (owned by docker-compose-auth).
+# The realm ships redirect URIs for compose's port; rewriting them here retargets the local run.
+python3 - "$REPO_ROOT" "$APP_PORT" <<'PY' > /tmp/realm-k3d.json
+import json, sys
+root, port = sys.argv[1], sys.argv[2]
+realm = json.load(open(f"{root}/deploy/k3d/realm.json"))
+app = f"http://localhost:{port}"
+for c in realm.get("clients", []):
+    if c.get("redirectUris"):
+        c["redirectUris"] = [f"{app}/*"]
+    if c.get("webOrigins"):
+        c["webOrigins"] = [app]
+json.dump(realm, sys.stdout, indent=2)
+PY
+kubectl -n "$NS" create configmap keycloak-realm \
+  --from-file=realm.json=/tmp/realm-k3d.json \
+  --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+kubectl -n "$NS" apply -f "$REPO_ROOT/deploy/k3d/keycloak.yaml" >/dev/null
+kubectl -n "$NS" rollout status deploy/keycloak --timeout=5m
+
+log "helm install"
+helm upgrade --install "$RELEASE" "$CHART" \
+  -n "$NS" \
+  -f "$VALUES" \
+  --set-string "secrets.data.mistral-api-key=$MISTRAL_API_KEY" \
+  --timeout 15m
+
+log "waiting for rollout"
+# gateway comes from helm-auth (present because k3d depends on auth); app services are gated like the build list.
+for d in {{#if (has "fastapi")}}api {{/if}}{{#if (has "tanstack-start")}}web {{/if}}{{#if (has "workflows")}}workflows {{/if}}gateway; do
+  kubectl -n "$NS" rollout status "deploy/$RELEASE-$d" --timeout=5m
+done
+{{#if (has "postgres")}}kubectl -n "$NS" rollout status "statefulset/$RELEASE-postgres" --timeout=5m
+{{/if}}
+
+log "smoke"
+code=$(curl -s -o /tmp/k3d-health.json -w '%{http_code}' --max-time 20 "http://localhost:${APP_PORT}/api/health")
+[ "$code" = "200" ] || die "/api/health returned $code (expected 200)"
+echo "    /api/health 200 $(cat /tmp/k3d-health.json)"
+{{#if (has "tanstack-start")}}
+# The `/` login redirect is a web concern; only assert it when the web runtime is in the closure.
+redirect=$(curl -s -o /dev/null -w '%{redirect_url}' --max-time 20 "http://localhost:${APP_PORT}/")
+case "$redirect" in
+  http://localhost:${KC_PORT}/realms/*) echo "    / redirects to Keycloak" ;;
+  *) die "/ did not redirect to Keycloak (got: ${redirect:-none})" ;;
+esac
+{{/if}}
+
+cat <<EOF
+
+  App       http://localhost:${APP_PORT}      log in as dev / dev
+  Keycloak  http://localhost:${KC_PORT}       admin / admin
+  Pods      kubectl -n ${NS} get pods
+  Tear down bunx nx run k3d:down
+
+EOF

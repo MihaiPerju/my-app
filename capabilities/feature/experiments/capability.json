@@ -1,0 +1,18 @@
+{
+  "id": "experiments",
+  "version": "0.0.0",
+  "title": "Experiments",
+  "description": "Feature-agnostic experiment framework: named variants keyed by (feature, name), content-addressed artifacts, active-experiment promotion, seed-based YAML loading, and result tracking — layered on top of the eval capability.",
+  "kind": "feature",
+  "default": false,
+  "categories": ["solutions"],
+  "dependencies": ["core", "evals"],
+  "packages": ["ts", "py"],
+  "envVars": {
+    "EXPERIMENTS_ENABLED": "false"
+  },
+  "metadata": {
+    "weight": 35,
+    "public": false
+  }
+}

@@ -1,0 +1,60 @@
+{{- if .Values.ingress.enabled }}
+{{- include "common.validateAuth" . }}
+{{- $host := default (printf "%s.%s" (default "app" .Values.global.appName) .Values.global.baseDomain) .Values.ingress.host }}
+{{- $tlsSecret := default (printf "%s-tls" (include "common.fullname" .)) .Values.ingress.tls.secretName }}
+{{- $fullname := include "common.fullname" . }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "common.labels" . | nindent 4 }}
+  annotations:
+    {{- if .Values.ingress.tls.enabled }}
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.tls.clusterIssuer | quote }}
+    {{- end }}
+    {{- if .Values.ingress.oidc.enabled }}
+    nginx.ingress.kubernetes.io/auth-url: {{ printf "https://%s/oauth2/auth" $host | quote }}
+    nginx.ingress.kubernetes.io/auth-signin: {{ printf "https://%s/oauth2/start?rd=$escaped_request_uri" $host | quote }}
+    mistralai-capabilities.mistralai.com/oidc-issuer: {{ .Values.ingress.oidc.issuerUrl | quote }}
+    mistralai-capabilities.mistralai.com/oidc-client-id: {{ .Values.ingress.oidc.clientId | quote }}
+    {{- with .Values.ingress.oidc.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- end }}
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ $host | quote }}
+      secretName: {{ $tlsSecret }}
+  {{- end }}
+  rules:
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          {{- /*
+            Both paths always target the gateway. There is no direct-to-api/web branch:
+            `common.validateAuth` refuses to render an ingress while gateway.enabled is false.
+            A fallback here would only be reachable by relaxing that guard, which would publish
+            the API to the internet with no OIDC login in front of it.
+          */}}
+          - path: {{ .Values.ingress.apiPath }}
+            pathType: {{ .Values.ingress.apiPathType }}
+            backend:
+              service:
+                name: {{ include "common.componentName" (dict "root" . "component" "gateway") }}
+                port:
+                  number: {{ .Values.gateway.service.port }}
+          - path: {{ .Values.ingress.webPath }}
+            pathType: {{ .Values.ingress.webPathType }}
+            backend:
+              service:
+                name: {{ include "common.componentName" (dict "root" . "component" "gateway") }}
+                port:
+                  number: {{ .Values.gateway.service.port }}
+{{- end }}

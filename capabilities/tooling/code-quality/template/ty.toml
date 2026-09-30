@@ -1,0 +1,27 @@
+[environment]
+python-version = "3.14"
+# First-party source roots; only a fallback, since ty resolves these through the synced venv. This
+# lists only the three packages core ships, so it holds for every composition. Optional trees are
+# discovered from the workspace layout by tools/quality.sh, which existence-filters them.
+root = [
+    "packages/py/utils/src",
+    "packages/py/env/src",
+]
+
+[src]
+# The nested agent project is loaded by path and has its own directory-scoped static analysis.
+# Excluding a path that is absent in compositions without agents is harmless.
+exclude = ["apps/worker/src/worker/agents"]
+
+[analysis]
+# Former mypy `ignore_missing_imports` overrides. `.**` matches all descendants (mypy's `.*` matched
+# only direct submodules).
+allowed-unresolved-imports = [
+    "mistralai.**",
+    "mistralai_guardrails.**",
+    "temporalio.**",
+    "mcp.**",
+    "fastmcp.**",
+    "vibe.**",
+    "pgvector.**",
+]

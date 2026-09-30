@@ -1,0 +1,22 @@
+{
+  "id": "apps",
+  "version": "0.0.0",
+  "title": "Mistral Apps",
+  "description": "Deployment to the Mistral Apps platform. A gateway sits in front of the app and puts a short-lived token on every request, scoped to the person who made it. This capability supplies that token to `utils.mistral` as the credential a caller's work spends, so a route calling the Mistral API on someone's behalf is billed and authorised as them rather than against the app's own key. The hidden `apps-fastapi` integration mounts it on the FastAPI host. The platform builds and runs the app itself, so nothing here contributes orchestration files.",
+  "kind": "deployment",
+  "default": true,
+  "categories": [
+    "solutions"
+  ],
+  "dependencies": [
+    "core"
+  ],
+  "packages": [
+    "ts",
+    "py"
+  ],
+  "metadata": {
+    "weight": 38,
+    "public": false
+  }
+}

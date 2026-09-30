@@ -1,0 +1,39 @@
+[project]
+name = "mistralai-capabilities-feature-chat"
+version = "0.1.0"
+description = "The vibe_agents session control plane the /chat surface is delivered over: the session store, the caller-principal decode, the request/response contract and the router that forwards to it."
+requires-python = ">=3.12,<3.15"
+license = "LicenseRef-Proprietary"
+dependencies = ["httpx>=0.27", "pydantic>=2"]
+
+# NOT declared: `mistralai-capabilities-backend-fastapi`, whose identity gate and SSE encoder `vibe/router.py`
+# imports. The CLI wires every selected toolkit into the app root as a path source, so declaring it
+# here too makes `uv lock` fail on the same distribution reached two ways -- first
+# "included as a workspace member, but is missing an entry in tool.uv.sources", then
+# "conflicting URLs ... (editable)" once that entry exists. The edge is real but it is already
+# carried where this registry carries edges: `chat` depends on `fastapi` in `capability.json`, so the
+# CLI cannot install this toolkit without that one. This mirrors `mistralai-capabilities-backend-fastapi`
+# itself, which imports the app-local `env` and `clients` packages and declares neither.
+
+# An optional extra rather than a base dep, for the same reason `mistralai-capabilities-backend-fastapi`
+# keeps its own FastAPI out of the base dist: only the API host imports `vibe/router.py`, and a
+# worker that installs this capability must never be able to load a web framework. The app
+# resolves FastAPI because `apps/api` declares it directly into the shared workspace environment.
+[project.optional-dependencies]
+api = ["fastapi>=0.115"]
+
+[build-system]
+requires = ["uv_build>=0.8.22,<0.9.0"]
+build-backend = "uv_build"
+
+[tool.uv]
+exclude-newer = "7 days"
+
+[tool.uv.build-backend]
+# The dist name is fixed by the CLI convention (= `<registry id>-<kind>-<capability id>`);
+# `module-name` decouples the IMPORT path from it, and puts this alongside the other capability
+# toolkits directly under `mistralai_capabilities`.
+# `namespace = true` makes this a PEP-420 portion so the sibling capability dists can each ship
+# their own slice of `mistralai_capabilities`.
+module-name = "mistralai_capabilities.chat"
+namespace = true

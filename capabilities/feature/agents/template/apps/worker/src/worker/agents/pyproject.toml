@@ -1,0 +1,55 @@
+[project]
+# The loader uses [project].name as the file-defined app / synthesized workflow name.
+name = "app-orchestrator"
+version = "0.1.0"
+requires-python = ">=3.12,<3.15"
+dependencies = [
+    # Keep this pin identical to the packages/py/agents member (the capability-agents SKILL documents
+    # the lockstep): the member installs the SDK into the shared env; this project declares its own
+    # import against that same env. `mistralai-agents` is public on PyPI, so no source binding.
+    "mistralai-agents==1.1.0rc6",
+    # `env` provides the typed settings the assembled tools read (persistent search reads env.api).
+    "env",
+    "httpx>=0.27",
+    "pydantic>=2",
+    "mistralai>=2.9.4",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.14",
+    "ty>=0.0.59",
+]
+
+[tool.uv.sources]
+env = { workspace = true }
+
+[tool.uv]
+package = false
+
+# The Unified Harness loads the orchestrator from this entrypoint (module:attr); `Agent.load_from` no
+# longer loads a folder. The project root is the import root, and `worker.agents.agent` resolves
+# through the installed worker package, so the worker and the CLI import one and the same module.
+[tool.mistralai.agents]
+entrypoint = "worker.agents.agent:agent"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "../../.."]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ty.environment]
+python-version = "3.14"
+
+[tool.ty.src]
+# The contribution packages (tools/, connectors/, hooks/, mcps/) are vendored by OTHER capabilities
+# (search, connectors, guardrailing, mcp-apps) and are type-checked by those capabilities. Exclude
+# them here so the agents project's own check never depends on an optional capability's toolkit being
+# importable in this environment.
+exclude = ['tools/', 'connectors/', 'hooks/', 'mcps/']
+
+[tool.ty.analysis]
+allowed-unresolved-imports = ["kazekit.**", "mistralai.agents.**", "mistralai.vibe_agents.**"]

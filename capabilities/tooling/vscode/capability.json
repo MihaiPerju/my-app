@@ -1,0 +1,19 @@
+{
+  "id": "vscode",
+  "version": "0.0.0",
+  "title": "VS Code",
+  "description": "Optional VS Code workspace settings and extension recommendations for the generated repository. Recommends and configures Python, TypeScript, quality (Ruff/ty/Oxc), Docker, and Helm support only when the matching capability is installed, so the editor setup reflects the languages and tools actually present.",
+  "kind": "tooling",
+  "categories": [
+    "solutions"
+  ],
+  "dependencies": [
+    "core"
+  ],
+  "packages": [],
+  "envVars": {},
+  "metadata": {
+    "weight": 40,
+    "public": false
+  }
+}

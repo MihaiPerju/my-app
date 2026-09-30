@@ -1,0 +1,197 @@
+name: Publish RC
+
+# Publishes a release candidate of every capability for a pull request whose
+# checks have all gone green, under ONE version string both ecosystems accept --
+# `@mistralai-capabilities/*` and the Python dists alike at `0.1.3-rc52309221`,
+# naming the head commit and targeting the next patch after the last release
+# tag. The candidate is announced back on the pull request as ONE comment,
+# rewritten on every green commit, so a reviewer installs exactly what the PR
+# proposes -- with one version to pass to `mistral apps init` -- without waiting
+# for a merge or a tag.
+#
+# THIS FILE DECIDES NOTHING. Whether a commit has earned a candidate is an
+# authorization question -- it ends with pull-request code being built by a job
+# that can reach this organisation's publish credentials -- so it is answered by
+# `scripts/release/rc/gate.ts`, which is typed and has tests, and not by a script pasted
+# into a YAML string. Same for the announcement (`scripts/release/rc/announce.ts`) and
+# the version (`scripts/release/rc/version.ts`). What is left here is wiring.
+#
+# WHY `workflow_run` AND NOT `pull_request`. A candidate must not exist until the
+# checks pass, and one workflow cannot `needs:` a job in another. So this one
+# wakes on the completion of either gating workflow and asks the API whether
+# EVERY run for that commit is finished and green; the last one to finish is the
+# one that proceeds. The consequence to know: `workflow_run` only fires for a
+# workflow file that is on the default branch, so this cannot run on its own pull
+# request. `workflow_dispatch` below is how you exercise it against one commit.
+#
+# WHAT GREEN MEANS. Both required workflows completed with `success`, and no
+# other workflow for that commit failed. Any non-successful e2e — including a run the environment
+# could not execute — does not publish.
+#
+# SECURITY. A `workflow_run` job runs in the base repository with access to
+# secrets, so it must never execute pull-request code. Fork pull requests are
+# refused outright, and `publish-core.yaml` keeps its build job secretless while
+# its upload jobs take their scripts from the default branch. See the trust
+# boundary comment there.
+#
+# One caveat by construction: on a `pull_request` event the checks run against
+# the MERGE commit, while a candidate is named for and built from the HEAD
+# commit. The candidate is what the branch contains, which is what its name says.
+
+on:
+  workflow_run:
+    workflows: ["Framework check", "Generated-app e2e"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Commit to publish a candidate for. Defaults to the default branch head."
+        required: false
+        type: string
+
+# Keyed on the commit, not the pull request: two commits may legitimately publish
+# at once, and a candidate already uploading must not be cancelled halfway. The
+# announcement, which two concurrent candidates would otherwise fight over, is
+# ordered by a head check in `rc-announce.ts` rather than by cancelling anything.
+concurrency:
+  group: publish-rc-${{ github.event.workflow_run.head_sha || inputs.sha || github.sha }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: Every check green?
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read # read the other workflows' runs for this commit
+      contents: read
+      pull-requests: read # resolve the pull request this commit is the head of
+    outputs:
+      ready: ${{ steps.gate.outputs.ready }}
+      sha: ${{ steps.gate.outputs.sha }}
+      pr: ${{ steps.gate.outputs.pr }}
+      base: ${{ steps.rc.outputs.base }}
+      version: ${{ steps.rc.outputs.version }}
+    steps:
+      # The default branch, never the pull request: these scripts run with a
+      # token. `fetch-depth: 0` is for the tags -- a candidate targets the next
+      # patch after the last release, so the tag list has to be complete.
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.0
+
+      # Both scripts print `key=value` lines, which is exactly the shape
+      # $GITHUB_OUTPUT wants. Notices go to stderr, so they cannot be read as one.
+      - name: Decide whether this commit has a candidate
+        id: gate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          # Distinguish a deliberate dispatch from a malformed workflow_run
+          # payload. Missing trigger fields must never grant dispatch semantics.
+          INVOCATION: ${{ github.event_name }}
+          # The dispatch input reaches the script through the environment, never
+          # interpolated into a shell command.
+          INPUT_SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          bun scripts/release/rc/gate.ts | tee -a "$GITHUB_OUTPUT"
+
+      - name: Derive the candidate version
+        id: rc
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          SHA: ${{ steps.gate.outputs.sha }}
+        run: |
+          set -euo pipefail
+          bun scripts/release/rc/version.ts "$SHA" | tee -a "$GITHUB_OUTPUT"
+
+  publish:
+    name: Publish candidate
+    needs: gate
+    if: needs.gate.outputs.ready == 'true'
+    permissions:
+      contents: write
+      id-token: write # the Cloudsmith OIDC exchange
+    uses: ./.github/workflows/publish-core.yaml
+    with:
+      # Build the approved PR head, but source every credential-bearing script
+      # from this default-branch workflow commit, never from the PR.
+      ref: ${{ needs.gate.outputs.sha }}
+      publisher_ref: ${{ github.sha }}
+      version: ${{ needs.gate.outputs.version }}
+      github_release: false
+    secrets: inherit
+
+  announce:
+    name: Announce the candidate
+    needs: [gate, publish]
+    if: needs.publish.result == 'success'
+    # The lock that makes the head check in `rc-announce.ts` sound. Reading the
+    # head and writing the comment are two operations, so on their own they are
+    # a check-then-act: an older candidate could read "I am the head", the branch
+    # could advance, a newer candidate could announce, and the older one could
+    # then overwrite it with obsolete install lines. Serialising per PULL REQUEST
+    # -- not per commit, which is what the workflow-level group does -- means no
+    # other announcement can run between this one's check and its write. An older
+    # candidate can still find the branch has moved under it, but only BEFORE its
+    # check, where the check catches it and skips. The result converges on the
+    # newest head from either order.
+    #
+    # The sha is the fallback key, never a bare prefix: a run with no pull
+    # request to announce on has nothing to serialise against, and GitHub keeps
+    # only ONE pending job per group even at `cancel-in-progress: false`, so a
+    # shared empty key would let unrelated dispatches cancel each other's jobs.
+    concurrency:
+      group: publish-rc-announce-${{ needs.gate.outputs.pr || needs.gate.outputs.sha }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write # the one comment
+    steps:
+      - name: Write the run summary
+        env:
+          SHA: ${{ needs.gate.outputs.sha }}
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: |
+          {
+            echo "### Release candidate for \`${SHA}\`"
+            echo
+            echo '```sh'
+            echo "mistral apps capability update ${VERSION}"
+            echo "bun add @mistralai-capabilities/<kind>-<id>@${VERSION}"
+            echo "uv add mistralai-capabilities-<kind>-<id>==${VERSION}"
+            echo '```'
+            echo
+            echo "One version string everywhere. Pin the exact version: candidates publish under"
+            echo "the \`rc\` npm dist-tag, and a PEP 440 pre-release is invisible to a plain \`uv add\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.0
+
+      # Skipped when no open pull request has this commit as its head, which is
+      # the dispatch case and the just-force-pushed case. The candidate is
+      # published either way; it simply has nowhere to be announced.
+      - name: Announce on the pull request
+        if: needs.gate.outputs.pr != ''
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR: ${{ needs.gate.outputs.pr }}
+          SHA: ${{ needs.gate.outputs.sha }}
+          BASE: ${{ needs.gate.outputs.base }}
+          VERSION: ${{ needs.gate.outputs.version }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bun scripts/release/rc/announce.ts

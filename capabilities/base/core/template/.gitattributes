@@ -1,0 +1,3 @@
+# Registry descriptors the `mistral apps` CLI resolves and commits: collapsed in GitHub diffs so a
+# capability bump does not bury the review.
+.mistral/cache/** linguist-generated

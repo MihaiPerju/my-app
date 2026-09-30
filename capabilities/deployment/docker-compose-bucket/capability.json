@@ -1,0 +1,26 @@
+{
+  "id": "docker-compose-bucket",
+  "version": "0.0.0",
+  "title": "Docker Compose — Bucket",
+  "description": "Docker Compose × Bucket integration. Owns the object-storage service overlay (deploy/compose/compose.bucket.yaml), powered by the upstream RustFS image, that the Compose development root includes when the S3-compatible store is deployed with Compose. Hidden: it activates automatically when both docker-compose and bucket are effective, and selecting it directly is shorthand for that pair. Template-only; delivered through the Git source.",
+  "kind": "deployment",
+  "visible": false,
+  "activatedWhen": {
+    "allOf": [
+      "docker-compose",
+      "bucket"
+    ]
+  },
+  "categories": [
+    "solutions"
+  ],
+  "packages": [],
+  "envVars": {
+    "BUCKET_PORT": "9000",
+    "BUCKET_CONSOLE_PORT": "9001"
+  },
+  "metadata": {
+    "weight": 45,
+    "public": false
+  }
+}

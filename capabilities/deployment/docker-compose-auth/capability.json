@@ -1,0 +1,25 @@
+{
+  "id": "docker-compose-auth",
+  "version": "0.0.0",
+  "title": "Docker Compose — Auth",
+  "description": "Docker Compose × Auth integration. Owns the gateway Compose root (deploy/compose/compose.gateway.yaml) with the APISIX edge gateway and the dev Keycloak IdP services, the gateway image (deploy/docker/Dockerfile.gateway), the APISIX data-plane config (deploy/docker/gateway/apisix.yaml and config.yaml), and the dev Keycloak realm import (deploy/docker/keycloak/realm.json). The Compose roots include compose.gateway.yaml and the smoke runbook exercises the gateway/OIDC flow only when auth is effective, so a Compose selection without auth carries no gateway or IdP tree. Hidden: it activates automatically when both docker-compose and auth are effective, and selecting it directly is shorthand for that pair. Template-only; delivered through the Git source.",
+  "kind": "deployment",
+  "visible": false,
+  "activatedWhen": {
+    "allOf": [
+      "docker-compose",
+      "auth"
+    ]
+  },
+  "categories": [
+    "solutions"
+  ],
+  "packages": [],
+  "envVars": {
+    "GATEWAY_PORT": "9080"
+  },
+  "metadata": {
+    "weight": 44,
+    "public": false
+  }
+}

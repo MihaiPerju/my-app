@@ -1,0 +1,88 @@
+# Values for the k3d run of the umbrella chart (tools/k3d-up.sh).
+#
+# This is a test fixture, not a deployment target. It exercises the chart end to end on a
+# laptop. It diverges from values-production.yaml only where a laptop forces it to. Anything
+# not listed here stays at the chart default, so the test covers the defaults.
+
+global:
+  baseDomain: "localhost"
+
+  image:
+    # Images are built by `bunx nx run compose:build-images` and side-loaded with `k3d image import`, so there
+    # is no registry to prefix. `Never` makes a missing image fail immediately with
+    # ErrImageNeverPull instead of retrying a registry.
+    registry: ""
+    # `docker compose build` tags the DEV target :latest (hot reload, writable rootfs), which
+    # fails on the chart's read-only rootfs. The k3d images use the :runtime tag instead.
+    tag: "runtime"
+    pullPolicy: Never
+
+  ingress:
+    host: "localhost"
+
+{{#if (has "postgres")}}  postgres:
+    # The whole point of the exercise: the in-cluster dev database, which is the
+    # path values-production.yaml never takes.
+    deploy: true
+    auth:
+      username: "postgres"
+      database: "mistralai_capabilities"
+
+{{/if}}
+# Local repositories, matching the names `docker compose build` produces. Each app override
+# block is gated by the per-capability selection gate, like deploy/helm/app/values.yaml.hbs:
+# a deselected module ships no subchart. init is core-owned.
+{{#if (has "fastapi")}}api:
+  image:
+    repository: "app-api"
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+
+{{/if}}{{#if (has "tanstack-start")}}web:
+  image:
+    repository: "app-web"
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+
+{{/if}}{{#if (has "workflows")}}workflows:
+  image:
+    repository: "app-workflows"
+  replicaCount: 1
+
+{{/if}}init:
+  image:
+    repository: "app-api"
+
+ingress:
+  enabled: true
+  className: "nginx"
+  host: "localhost"
+  tls:
+    # No cert-manager in the cluster, and the realm's redirect URI is http anyway.
+    enabled: false
+  oidc:
+    # The APISIX gateway performs the OIDC login. Leaving this true additionally makes
+    # ingress-nginx auth_request against https://<host>/oauth2/auth, which nothing in
+    # this chart serves.
+    enabled: false
+
+auth:
+  oidc:
+    # The address the gateway uses to reach Keycloak, not the address the browser uses.
+    # Keycloak pins the issuer and authorization endpoint to KC_HOSTNAME, while
+    # KC_HOSTNAME_BACKCHANNEL_DYNAMIC keeps the token and introspection endpoints on the
+    # URL they were fetched through. Same split as deploy/compose/compose.gateway.yaml.
+    issuerUrl: "http://keycloak:8080/realms/mistralai-capabilities"
+    clientId: "app"
+    realm: "mistralai-capabilities"
+
+secrets:
+  create: true
+  data:
+    # postgres-password is deliberately absent: templates/secret.yaml generates one
+    # and preserves it across upgrades. mistral-api-key is injected by tools/k3d-up.sh
+    # with --set-string, so no credential lands in this file.
+    oidc-client-secret: "dev-client-secret"
+    gateway-session-secret: "dev-session-secret-change-me-32b"

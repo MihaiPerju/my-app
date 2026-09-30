@@ -1,0 +1,33 @@
+{
+  "id": "agents",
+  "version": "0.0.0",
+  "title": "Agents",
+  "description": "The file-defined agent project: the single Unified Harness orchestrator agent, its instructions, and the per-kind Harness-assembly seam that sibling capabilities extend.",
+  "kind": "feature",
+  "categories": [
+    "solutions"
+  ],
+  "dependencies": [
+    "core",
+    "fastapi",
+    "postgres",
+    "workflows",
+    "observability"
+  ],
+  "packages": [
+    "ts",
+    "py"
+  ],
+  "envVars": {
+    "MISTRAL_API_KEY": "",
+    "ORCHESTRATOR_MODEL": "mistral-medium-3-5",
+    "PROMPT_REGISTRY_ENABLED": "false",
+    "PROMPT_REGISTRY_NAME": "{{app_name}}-orchestrator",
+    "PROMPT_REGISTRY_ALIAS": "production",
+    "PROMPT_REGISTRY_TIMEOUT_SECONDS": "5.0"
+  },
+  "metadata": {
+    "weight": 20,
+    "public": false
+  }
+}

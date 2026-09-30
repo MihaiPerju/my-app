@@ -1,0 +1,91 @@
+# api subchart — FastAPI HTTP service.
+# Off by default; the umbrella sets `api.enabled: true` only when the `fastapi` capability is selected.
+enabled: false
+replicaCount: 2
+image:
+  repository: "docker/solutions/{{projectName}}-api"
+  tag: "" # falls back to global image.tag
+  pullPolicy: ""
+ports:
+  enabled: true
+containerPort: 3000
+service:
+  type: ClusterIP
+  port: 3000
+command: []
+args: []
+env:
+  NODE_ENV: "production"
+{{#if (has "custom-rbac")}}  # RBAC (authorization): policy backend and the pages the matrix can grant. `allow_all` (dev
+  # god-mode) is refused at render time. Bootstrap admins come from global.customRbac.bootstrapAdmins.
+  CUSTOM_RBAC_POLICY: "pg"
+  CUSTOM_RBAC_PAGES: ""
+{{/if}}resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
+# tmpfs mount to satisfy readOnlyRootFilesystem; the Python API caches to /tmp
+# (UV_CACHE_DIR=/tmp/uv-cache, XDG_CACHE_HOME=/tmp).
+writableVolumes:
+  - name: tmp
+    mountPath: /tmp
+# Three probes, three paths, three jobs. The base below is only what they share; each
+# sub-map overrides it. `/api/health` itself is NOT probed — it is the always-200 debug
+# endpoint, and is deliberately left unpublished to the probes.
+#
+# These paths are NOT added to the gateway route lists. The kubelet probes the pod IP
+# directly, so they never traverse APISIX; leaving them unmatched there means they fall
+# through to the OIDC-protected /api/* route and stay unreachable from outside.
+probes:
+  enabled: true
+  path: "/api/health"
+  periodSeconds: 10
+  # No initialDelaySeconds anywhere: startup owns the slow boot, and setting a delay on
+  # liveness as well would spend the budget twice.
+  startup:
+    path: "/api/health/startup"
+    periodSeconds: 2
+    timeoutSeconds: 1
+    # 30 x 2s = 60s for the workflow + agent SDK import graph. Liveness and readiness do
+    # not run until this passes, which is what lets liveness stay tight afterwards.
+    failureThreshold: 30
+  liveness:
+    path: "/api/health/live"
+    periodSeconds: 10
+    timeoutSeconds: 1
+    failureThreshold: 3
+  readiness:
+    path: "/api/health/ready"
+    periodSeconds: 5
+    # Must exceed db `_PING_TIMEOUT_S` (2.0s), or the kubelet gives up before the app
+    # answers and a reachable database reads as unready.
+    timeoutSeconds: 3
+    # Leave rotation after ~10s; liveness needs 30s, so a blip is shed, not restarted.
+    failureThreshold: 2
+# Drain before the socket closes. preStop runs to completion BEFORE SIGTERM, so this is the
+# only place a readiness 503 can still be served: touch marks the replica draining, and the
+# sleep covers readiness noticing (2 x 5s) plus EndpointSlice propagation. `exec` and not the
+# native `sleep` action because Chart.yaml admits k8s >= 1.26 and that action is 1.30+.
+# /tmp is the tmpfs from writableVolumes above — the rootfs is read-only.
+# The path is a contract with api/routers/api/internal/health.py::DRAIN_SENTINEL.
+lifecycle:
+  preStop:
+    exec:
+      command: ["sh", "-c", "touch /tmp/drain && sleep 15"]
+# 15s preStop + 20s uvicorn --timeout-graceful-shutdown + 10s margin. Sequential, not
+# overlapping: size this as the sum or a mid-drain SIGKILL resets in-flight requests.
+terminationGracePeriodSeconds: 45
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 75
+podSecurityContext: {}
+containerSecurityContext: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+podAnnotations: {}

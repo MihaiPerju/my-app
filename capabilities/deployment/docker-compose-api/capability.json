@@ -1,0 +1,25 @@
+{
+  "id": "docker-compose-api",
+  "version": "0.0.0",
+  "title": "Docker Compose — API",
+  "description": "Docker Compose × API integration. Owns the API service overlays (deploy/compose/compose.api.yaml and compose.api.dev.yaml) that the Compose roots include when the API runtime is deployed with Compose. Hidden: it activates automatically when both docker-compose and fastapi are effective, and selecting it directly is shorthand for that pair. Template-only; delivered through the Git source.",
+  "kind": "deployment",
+  "visible": false,
+  "activatedWhen": {
+    "allOf": [
+      "docker-compose",
+      "fastapi"
+    ]
+  },
+  "categories": [
+    "solutions"
+  ],
+  "packages": [],
+  "envVars": {
+    "API_PORT": "3000"
+  },
+  "metadata": {
+    "weight": 41,
+    "public": false
+  }
+}

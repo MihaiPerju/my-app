@@ -1,0 +1,257 @@
+/*
+ * Vendored from `@mistral/tailwind-config` (ts/tooling/tailwind) in the monorepo `@mistralai/ui`
+ * is published from — the same place the four `@mistral/*` siblings come from. This is the design
+ * system's THEME. Since 86.0.0 `@mistralai/ui` also ships it as `@mistralai/ui/web.css`, but that
+ * copy carries deletions 2 to 4 below, so this re-sync of the 86.0.0 files stays the one apps/web
+ * imports. 86.1.0 ships `tailwind/` byte-identical to 86.0.0, so nothing here changed with it.
+ * Every `bg-default`, `text-muted` and `border-default` a DS component renders is defined here or
+ * nowhere.
+ *
+ * Four deletions from upstream, all of them things that cannot follow the file out of its
+ * monorepo. Keep them deleted on the next re-sync:
+ *
+ * 1. `@source "../src"`, upstream's scan of the DS package's own source, which does not exist
+ *    here. `apps/web/src/index.css` declares the sources that do — the installed `@mistralai/ui`
+ *    and this repo's capability library.
+ * 2. `@config "./typography.config.js"` and `@plugin "@tailwindcss/typography"`. The config is a
+ *    Tailwind v3 file whose values are `theme("colors.text.primary")` lookups into a palette this
+ *    v4 token set does not expose, and nothing here wears a `prose` class. What the plugin is
+ *    actually needed for is the `--tw-prose-*` variables `@mistralai/ui/markdown.css` reads — and
+ *    le-chat-web does not get those from the plugin either: it declares them on `:root` in its own
+ *    globals.css. `apps/web/src/styles/index.css` does the same, which is the faithful port.
+ * 3. `@import "tw-animate-css"` at the top of `animations.css`. `apps/web/src/index.css` already
+ *    imports it, ahead of this file, and a second import would emit every `animate-in` /
+ *    `fade-in-0` / `zoom-in-95` / `slide-in-from-*` utility twice.
+ * 4. A `@theme` block mapping `--color-border`, `--color-background`, `--color-foreground` and
+ *    seven `--color-sidebar-*` to `hsl(var(--border))`-style triplets. Those triplets are defined
+ *    by the CONSUMING app in the upstream monorepo, not by this package, so vendored verbatim they
+ *    resolve to `hsl()` of nothing — utilities that look live and paint transparent. Nothing here
+ *    uses `bg-background` or `border-border`; the semantic tokens below are the real surface.
+ *
+ * One divergence that is not a deletion: `fonts.css` keeps `./fonts/...` URLs, because the fonts
+ * are vendored next to it. Upstream now writes `@mistralai/ui/fonts/...` package specifiers.
+ */
+
+@import "./colors.css";
+@import "./shadows.css";
+@import "./radii.css";
+@import "./fonts.css";
+@import "./desktop.css";
+@import "./animations.css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Restore the emulated hover behavior on touch devices (standard css behavior but intentionally removed from the tailwindcss v4 utility class) */
+@variant hover (&:hover);
+
+@theme static {
+  /* Untouched default breakpoints. Kept static for runtime consumers such as useBreakpoint. */
+  --breakpoint-sm: 40rem;
+  --breakpoint-md: 48rem;
+  --breakpoint-lg: 64rem;
+  --breakpoint-xl: 80rem;
+  --breakpoint-2xl: 96rem;
+}
+
+@theme {
+  --z-index-scroll-area: 20;
+
+  /* These mimick the screen breakpoint sizes, but for container sizes */
+  /* allows to do container queries that target the usual breakpoints like "@min-screen-sm:p-2" */
+  --container-screen-sm: 40rem;
+  --container-screen-md: 48rem;
+  --container-screen-lg: 64rem;
+  --container-screen-xl: 80rem;
+  --container-screen-2xl: 96rem;
+
+  --text-2xs: 0.6875rem;
+
+  /* Used by font-headings utility and auto-applied
+     to text-2xl through text-7xl and h1-h6. */
+  --font-headings: "ALT Mistral", ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+  /* Display scale (2xl–7xl) — sizes */
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: 2rem;
+  --text-2xl--letter-spacing: 0;
+
+  --text-3xl: 2rem;
+  --text-3xl--line-height: 2.5rem;
+  --text-3xl--letter-spacing: 0;
+
+  --text-4xl: 2.75rem;
+  --text-4xl--line-height: 3.25rem;
+  --text-4xl--letter-spacing: -0.01em;
+
+  --text-5xl: 3.5rem;
+  --text-5xl--line-height: 3.75rem;
+  --text-5xl--letter-spacing: -0.01em;
+
+  --text-6xl: 4.5rem;
+  --text-6xl--line-height: 4.5rem;
+  --text-6xl--letter-spacing: -0.02em;
+
+  --text-7xl: 6rem;
+  --text-7xl--line-height: 6rem;
+  --text-7xl--letter-spacing: -0.02em;
+
+  --shadow-small: 0px 0px 3px 0px var(--shadow-4, rgba(0, 0, 0, 0.04));
+  --shadow-medium:
+    2px 12px 5px 0px var(--shadow-1, rgba(0, 0, 0, 0.01)), 1px 7px 4px 0px var(--shadow-2, rgba(0, 0, 0, 0.02)),
+    1px 3px 3px 0px var(--shadow-3, rgba(0, 0, 0, 0.03)), 0px 1px 2px 0px var(--shadow-4, rgba(0, 0, 0, 0.04));
+  --shadow-large:
+    7px 40px 16px 0px var(--shadow-1, rgba(0, 0, 0, 0.01)), 4px 23px 14px 0px var(--shadow-2, rgba(0, 0, 0, 0.02)),
+    2px 10px 10px 0px var(--shadow-3, rgba(0, 0, 0, 0.03)), 0px 3px 6px 0px var(--shadow-4, rgba(0, 0, 0, 0.04));
+}
+
+/* see https://tailwindcss.com/docs/upgrade-guide#buttons-use-the-default-cursor */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+@layer base {
+  /*
+   * Upstream opens this block with `* { @apply border-border; }`. `border-border` was the
+   * `--color-border: hsl(var(--border))` utility deleted with the rest of that shadcn `@theme`
+   * block (see the header, deletion 4), so applying it here would now fail the build outright.
+   * The `border-color: var(--border-color-default, currentColor)` rule further down this file is
+   * the v4-token equivalent and already covers every element plus the pseudo-elements.
+   */
+  body {
+    @apply bg-default text-default;
+  }
+
+  /* Display sizes auto-use ALT Mistral (exclude markdown prose and small text < 24px). */
+  .text-3xl,
+  .text-4xl,
+  .text-5xl,
+  .text-6xl,
+  .text-7xl,
+  h1:not(.markdown-container-style *, .text-2xs, .text-xs, .text-sm, .text-base, .text-md, .text-lg),
+  h2:not(.markdown-container-style *, .text-2xs, .text-xs, .text-sm, .text-base, .text-md, .text-lg),
+  h3:not(.markdown-container-style *, .text-2xs, .text-xs, .text-sm, .text-base, .text-md, .text-lg),
+  h4:not(.markdown-container-style *, .text-2xs, .text-xs, .text-sm, .text-base, .text-md, .text-lg),
+  h5:not(.markdown-container-style *, .text-2xs, .text-xs, .text-sm, .text-base, .text-md, .text-lg),
+  h6:not(.markdown-container-style *, .text-2xs, .text-xs, .text-sm, .text-base, .text-md, .text-lg) {
+    font-family: var(--font-headings);
+  }
+}
+
+/* Standard DS keyboard-nav focus ring — applied directly to a focusable element. */
+@utility focus-ring {
+  @apply focus-visible:ring-default outline-hidden focus-visible:ring-3 focus-visible:ring-offset-1;
+}
+
+/* Focus ring for a wrapper element that contains an <input>, or for a standalone <input>. */
+@utility input-wrapper-focus-ring {
+  @apply ring-border-default;
+
+  &:has(input:focus),
+  &:is(input:focus) {
+    @apply shadow-input-focus ring-3;
+  }
+}
+
+/* Focus ring for a wrapper element that contains a <textarea>. */
+@utility textarea-wrapper-focus-ring {
+  @apply ring-border-default;
+
+  &:has(textarea:focus) {
+    @apply shadow-input-focus ring-3;
+  }
+}
+
+/* Logo text exception compact 16/18 ALT Mistral, not for general UI. */
+@utility font-logo-text {
+  font-family: var(--font-headings);
+  font-size: 1rem;
+  line-height: 1.125rem;
+}
+
+/*
+  The default border color has changed to `currentColor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--border-color-default, currentColor);
+  }
+}
+
+/* Hide scrollbar for all main browsers */
+@utility scrollbar-hidden {
+  /* Chrome, Safari and Opera */
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizelegibility;
+}
+
+/** Add black dots to the corners of an element */
+@utility corner-dots {
+  position: relative;
+
+  &::before {
+    content: "";
+    position: absolute;
+    --_dot: var(--corner-dot-size, 4px);
+    inset: calc(var(--_dot) / -2 - var(--corner-dot-offset, 0px));
+    pointer-events: none;
+    z-index: 10;
+    --_tl: var(--corner-dot-tl, transparent);
+    --_tr: var(--corner-dot-tr, transparent);
+    --_bl: var(--corner-dot-bl, transparent);
+    --_br: var(--corner-dot-br, transparent);
+    background:
+      linear-gradient(var(--_tl), var(--_tl)) 0 0 / var(--_dot) var(--_dot) no-repeat,
+      linear-gradient(var(--_tr), var(--_tr)) 100% 0 / var(--_dot) var(--_dot) no-repeat,
+      linear-gradient(var(--_bl), var(--_bl)) 0 100% / var(--_dot) var(--_dot) no-repeat,
+      linear-gradient(var(--_br), var(--_br)) 100% 100% / var(--_dot) var(--_dot) no-repeat;
+  }
+}
+
+@utility corner-dot-tl {
+  --corner-dot-tl: var(--corner-dot-color, black);
+}
+
+@utility corner-dot-tr {
+  --corner-dot-tr: var(--corner-dot-color, black);
+}
+
+@utility corner-dot-bl {
+  --corner-dot-bl: var(--corner-dot-color, black);
+}
+
+@utility corner-dot-br {
+  --corner-dot-br: var(--corner-dot-color, black);
+}
+
+@utility corner-dots-offset-* {
+  --corner-dot-offset: --value([length]);
+  --corner-dot-offset: --value(--corner-dot-offset-*);
+}
+
+@theme {
+  --corner-dot-offset-0: 0px;
+  --corner-dot-offset-0\.5: 0.5px;
+  --corner-dot-offset-px: 1px;
+  --corner-dot-offset-1: 1px;
+  --corner-dot-offset-2: 2px;
+}

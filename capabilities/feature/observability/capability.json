@@ -1,0 +1,32 @@
+{
+  "id": "observability",
+  "version": "0.0.0",
+  "title": "Observability",
+  "description": "Send Mistral SDK and Workflow traces to Mistral Studio and read Studio spans and evaluations back, with agent guidance for instrumenting application-owned operations and tool calls.",
+  "kind": "feature",
+  "categories": [
+    "solutions"
+  ],
+  "dependencies": [
+    "core"
+  ],
+  "packages": [
+    "ts",
+    "py"
+  ],
+  "envVars": {
+    "MISTRAL_API_KEY": "",
+    "MISTRAL_OTLP_TRACES_ENDPOINT": "https://api.mistral.ai/telemetry/v1/traces",
+    "MISTRAL_SDK_TELEMETRY": "dedicated",
+    "OTEL_ENABLED": "true",
+    "OBSERVABILITY_READ_ENABLED": "false",
+    "OBSERVABILITY_API_BASE_URL": "https://api.mistral.ai",
+    "OBSERVABILITY_REQUEST_TIMEOUT_SECONDS": "30.0",
+    "OBSERVABILITY_PAGE_SIZE": "100",
+    "OBSERVABILITY_MAX_PAGES": "50"
+  },
+  "metadata": {
+    "weight": 20,
+    "public": false
+  }
+}

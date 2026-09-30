@@ -1,0 +1,10 @@
+{
+  "recommendations": [
+    "ms-python.python"{{#if (has "code-quality")}},
+    "charliermarsh.ruff",
+    "astral-sh.ty"{{#if (has "tanstack-start")}},
+    "oxc.oxc-vscode"{{/if}}{{/if}}{{#if (has "docker-compose")}},
+    "ms-azuretools.vscode-docker"{{/if}}{{#if (has "helm")}},
+    "tim-koehler.helm-intellisense"{{/if}}
+  ]
+}

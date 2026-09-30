@@ -1,0 +1,7 @@
+# shellcheck policy for `bunx nx run quality:lint-shell`. shellcheck finds this file by walking up
+# from each script it checks.
+#
+# The tool scripts source their siblings as `. "${0%/*}/lib.sh"` so that they work from any working
+# directory. shellcheck cannot evaluate `${0%/*}`, so without this every such line is SC1091
+# ("Not following"). `SCRIPTDIR` makes it look for the sourced file beside the script instead.
+source-path=SCRIPTDIR

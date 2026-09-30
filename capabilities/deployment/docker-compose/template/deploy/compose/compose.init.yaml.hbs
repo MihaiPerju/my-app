@@ -1,0 +1,119 @@
+# All init steps reuse the deployment-owned Python runtime image (deploy/docker/Dockerfile.init),
+# which carries every workspace package without requiring an app module. Every step is idempotent,
+# so the chain re-runs on
+# every `up`. Migrations and guardrail gate the app; schedules run after the worker because a
+# schedule targets a workflow the worker must register first.
+#
+# Every step is gated on the capability that ships its module: migrations (postgres), prompts
+# (agents), guardrail (guardrailing), agents (chat), schedules (evals). Deselecting one drops
+# its service here and its step in the Helm init chart. guardrail and prompts run in parallel
+# off migrations and both imply postgres, so neither renders without the service it waits on.
+#
+# Adding a step is adding a file under packages/py/cli/src/cli/commands and a service here.
+x-init-step: &init-step
+  build:
+    context: ../..
+    dockerfile: deploy/docker/Dockerfile.init
+    target: init
+    args:
+      REGISTRY_PY_USER: ${MISTRAL_REGISTRY_USER:-}
+    secrets:
+      - registry_token
+  # Pinned so all init services resolve to one built image instead of one build each. Compose
+  # resolves COMPOSE_PROJECT_NAME to the effective project name, so each app (and each `-p`) builds
+  # its own tag and never overwrites another app's init image.
+  image: ${COMPOSE_PROJECT_NAME}-init:local
+  init: true
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  read_only: true
+  tmpfs:
+    - /tmp
+  env_file:
+    - path: ../../.env
+      required: false
+  environment:
+    DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
+    HOME: /tmp
+    # DEPLOYMENT_NAME comes from env_file (.env) so this step targets the same per-user queue
+    # as the local api/workflows processes; compose ${} interpolation cannot read this env_file.
+  restart: "no"
+
+services:
+{{#if (has "postgres")}}  init-migrations:
+    <<: *init-step
+    command: ["sh", "-c", "exec uv run --frozen --no-dev --no-sync python -m cli migrations"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+{{/if}}{{#if (has "custom-rbac")}}  # Seeds the configured bootstrap admins into the schema migrations create, so a fresh
+  # deployment has an admin able to reach the admin API. Idempotent; a no-op with none configured.
+  init-custom-rbac:
+    <<: *init-step
+    command: ["sh", "-c", "exec uv run --frozen --no-dev --no-sync python -m cli custom-rbac"]
+    depends_on:
+      init-migrations:
+        condition: service_completed_successfully
+
+{{/if}}{{#if (has "guardrailing")}}  init-guardrail:
+    <<: *init-step
+    command: ["sh", "-c", "exec uv run --frozen --no-dev --no-sync python -m cli guardrail"]
+    depends_on:
+      init-migrations:
+        condition: service_completed_successfully
+
+{{/if}}{{#if (has "agents")}}  # Publishes agent/instructions.md to the prompt registry. Gated before the worker so a fresh
+  # stack's worker resolves the registry version on its first boot; a worker that starts first
+  # falls back to the file until it restarts. A no-op unless PROMPT_REGISTRY_ENABLED is on. Runs
+  # off migrations so it is unaffected when guardrailing is deselected.
+  init-prompts:
+    <<: *init-step
+    command: ["sh", "-c", "exec uv run --frozen --no-dev --no-sync python -m cli prompts"]
+    depends_on:
+      init-migrations:
+        condition: service_completed_successfully
+
+{{/if}}{{#if (has "chat")}}  # Runs after the worker, because registration binds an agent name to a workflow the worker
+  # must already serve. It registers this deployment's own agent (VIBE_AGENTS_AGENT_NAME, which
+  # defaults to DEPLOYMENT_NAME); it skips without MISTRAL_API_KEY, and warns and skips when the
+  # name is the platform builtin `nuage-session`.
+  init-agents:
+    <<: *init-step
+    command: ["sh", "-c", "exec uv run --frozen --no-dev --no-sync python -m cli agents"]
+    depends_on:
+      workflows:
+        condition: service_started
+
+{{/if}}{{#if (has "evals")}}  # Also after the worker: a schedule targets a workflow the worker must register first.
+  # Gate on service_started, not service_healthy: the schedules command retries the platform's
+  # "not found" 404 to bridge the lag before the worker registers, so it need not wait on the probe.
+  init-schedules:
+    <<: *init-step
+    command: ["sh", "-c", "exec uv run --frozen --no-dev --no-sync python -m cli schedules"]
+    depends_on:
+      workflows:
+        condition: service_started
+
+{{/if}}  # The one name the application services wait on: DB schema (+ guardrail corpus and RBAC admins
+  # when installed) ready. Schedules and agent registration are deliberately not gated here — both
+  # run after the worker (see above).
+  init:
+    <<: *init-step
+    command: ["true"]
+{{#if (has "postgres")}}    depends_on:
+      init-migrations:
+        condition: service_completed_successfully
+{{#if (has "custom-rbac")}}      init-custom-rbac:
+        condition: service_completed_successfully
+{{/if}}{{#if (has "guardrailing")}}      init-guardrail:
+        condition: service_completed_successfully
+{{/if}}{{#if (has "agents")}}      init-prompts:
+        condition: service_completed_successfully
+{{/if}}{{/if}}
+
+# `registry_token` is not declared here. This file is only pulled in via `include:` from
+# compose.yaml and compose.dev.yaml, both of which declare it. A second declaration in an
+# included file is rejected with "secrets.registry_token conflicts with imported resource".

@@ -1,0 +1,20 @@
+{
+  "id": "k3d",
+  "version": "0.0.0",
+  "title": "k3d",
+  "description": "Optional local Kubernetes workflow: a thin local-cluster concern that stands the umbrella chart up on a k3d cluster and proves it serves a login. `k3d-up` deploys the init workload on the API image and probes `/api/health`, so it depends on `fastapi`; it also depends on `auth`, which supplies Postgres-backed identity and activates `fastapi-auth`. The hidden `k3d-auth` integration owns the in-cluster Keycloak resources and realm import, so the generic k3d root carries no identity manifests. The `/` login-redirect smoke check is gated on `tanstack-start`, so a selection without the web runtime still stands the cluster up and smoke-tests the API. Template-only; delivered through the Git source.",
+  "kind": "deployment",
+  "categories": [
+    "solutions"
+  ],
+  "dependencies": [
+    "helm",
+    "fastapi",
+    "auth"
+  ],
+  "packages": [],
+  "metadata": {
+    "weight": 52,
+    "public": false
+  }
+}

@@ -1,0 +1,12 @@
+apiVersion: v2
+name: common
+description: |
+  Shared library chart for {{projectName}}. Provides the common.* named
+  templates (naming, labels, image/security/env helpers) and the generic workload
+  templates (deployment/service/job/hpa) that every service subchart includes.
+  All shared configuration is read from .Values.global.* so it flows identically
+  into every subchart; cross-resource names derive from .Release.Name so a name
+  computed in one chart matches the same name referenced from another.
+type: library
+version: 0.1.0
+appVersion: "0.1.0"

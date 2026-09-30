@@ -1,0 +1,55 @@
+apiVersion: v2
+name: {{projectName}}
+description: |
+  Production Helm umbrella chart for the Solutions Capabilities App — a Mistral Studio
+  showcase. Deploys the full topology via per-service subcharts: api (FastAPI HTTP,
+  with the MCP server mounted at /mcp), web (TanStack Start SSR), workflows (Mistral
+  workflow worker), plus a hardened DB migration Job. Shared
+  logic lives in the `common` library chart. Postgres (pgvector) is referenced as an
+  external hosted service by default, with a flag-gated in-cluster dev instance.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.26.0-0"
+keywords:
+  - mistral
+  - mistralai-capabilities
+  - tanstack-start
+home: https://github.com/mistralai/mistralai-capabilities-app
+maintainers:
+  - name: Solutions Capabilities
+sources:
+  - https://github.com/mistralai/mistralai-capabilities-app
+annotations:
+  category: Application
+# The shared chart owns `common` and `init`; hidden `helm-*` integration capabilities contribute
+# service subcharts when Helm and their service capability are both effective. Every dependency
+# below therefore resolves in each generated composition. Runtime rendering remains gated by the
+# matching values condition; the postgres in-cluster instance additionally stays gated by
+# `global.postgres.deploy`.
+dependencies:
+  - name: common
+    version: 0.1.0
+    repository: "file://charts/common"
+{{#if (has "fastapi")}}  - name: api
+    version: 0.1.0
+    repository: "file://charts/api"
+    condition: api.enabled
+{{/if}}{{#if (has "tanstack-start")}}  - name: web
+    version: 0.1.0
+    repository: "file://charts/web"
+    condition: web.enabled
+{{/if}}{{#if (has "workflows")}}  - name: workflows
+    version: 0.1.0
+    repository: "file://charts/workflows"
+    condition: workflows.enabled
+{{/if}}
+  - name: init
+    version: 0.1.0
+    repository: "file://charts/init"
+    condition: init.enabled
+{{#if (has "postgres")}}  - name: postgres
+    version: 0.1.0
+    repository: "file://charts/postgres"
+    condition: global.postgres.deploy
+{{/if}}

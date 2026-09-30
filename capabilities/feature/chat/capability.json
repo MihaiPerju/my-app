@@ -1,0 +1,33 @@
+{
+  "id": "chat",
+  "version": "0.0.0",
+  "title": "Chat",
+  "description": "Conversational surface: the chat web feature, the /v1/chat routes and the vibe control-plane forwarder, plus the reusable chat types, api contract and TanStack hooks.",
+  "kind": "feature",
+  "categories": [
+    "solutions"
+  ],
+  "dependencies": [
+    "core",
+    "auth",
+    "fastapi",
+    "tanstack-start",
+    "mistral-design-system",
+    "agents",
+    "mcp-apps"
+  ],
+  "packages": [
+    "ts",
+    "py"
+  ],
+  "envVars": {
+    "MISTRAL_API_KEY": "",
+    "VIBE_AGENTS_AGENT_NAME": "",
+    "VIBE_AGENTS_APPLICATION_NAME": "vibe_code_web",
+    "VIBE_AGENTS_TIMEOUT_SECONDS": "30"
+  },
+  "metadata": {
+    "weight": 20,
+    "public": false
+  }
+}

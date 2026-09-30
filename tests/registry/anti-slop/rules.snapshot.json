@@ -1,0 +1,18 @@
+{
+  "anti-slop-effect/no-service-constructor-imports": 1,
+  "anti-slop/no-chained-type-assertions": 4,
+  "anti-slop/no-conditional-empty-object-spread": 3,
+  "anti-slop/no-known-value-widening": 4,
+  "anti-slop/no-module-mocking": 4,
+  "anti-slop/no-object-parameters": 4,
+  "anti-slop/no-reflect-apply": 2,
+  "anti-slop/no-reflect-get": 2,
+  "anti-slop/no-runtime-typeof": 3,
+  "anti-slop/no-shape-in-symbol-names": 14,
+  "anti-slop/no-unknown-parameters": 4,
+  "anti-slop/no-unknown-returns": 4,
+  "anti-slop/no-unknown-type-aliases": 4,
+  "anti-slop/no-unsafe-dictionary-type": 6,
+  "anti-slop/no-widen-then-assert": 2,
+  "anti-slop/require-safety-comment-for-type-assertion": 4
+}

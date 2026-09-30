@@ -1,0 +1,64 @@
+[project]
+name = "mistralai-capabilities-feature-search"
+version = "0.1.0"
+description = "Search capability: ingestion, reconcile, hybrid Postgres/local stores and retrieval-quality evaluation."
+requires-python = ">=3.12,<3.15"
+license = "LicenseRef-Proprietary"
+dependencies = [
+    "mistralai>=2.9.4",
+    "mistralai-workflows>=3.10.0",
+    "mistralai-search-toolkit==0.0.13",
+    "mistralai-search-toolkit-plugins-postgres==0.0.13",
+    # Declared rather than pulled through the toolkit's `vespa` extra, which resolves to this
+    # same name: an extra is not a direct requirement, so `[tool.uv.sources]` would not reach
+    # it and the binding below could not steer it off the private index.
+    "mistralai-search-toolkit-plugins-vespa==0.0.13",
+    "mistralai-search-toolkit-storage-s3==0.0.13",
+    "mistralai-search-toolkit-storage-gcs==0.0.13",
+    "mistralai-search-toolkit-storage-azure==0.0.13",
+    # The Workflows Search Plugin. It carries the four staged ingestion activities
+    # (extract / split / process / embed_and_index) and the batch workflow this capability
+    # drives; `reconcile.py` only registers the pipelines they resolve by name. Pinned below
+    # 0.2 because the stage payload models are its public wire format.
+    "mistralai-workflows-plugins-search>=0.1.0,<0.2.0",
+    # Not imported here; declared to make it bindable. It arrives transitively from
+    # `mistralai-search-toolkit`, and uv applies `[tool.uv.sources]` to direct requirements
+    # only. The private index carries the same name at older versions, so under
+    # `index-strategy = "first-index"` a machine with that host as a general index resolves
+    # the name only there and fails against `>=1.10.0`. This specifier mirrors what the
+    # toolkit declares, so resolution is unchanged; the point is the binding below.
+    "mistral-common[sentencepiece]>=1.10.0,<2.0.0",
+    "sqlalchemy>=2.0.36",
+    "sqlmodel>=0.0.24",
+    "structlog>=25",
+    "pydantic>=2",
+]
+
+
+[tool.uv.sources]
+mistralai-search-toolkit = { index = "pypi" }
+mistralai-search-toolkit-plugins-postgres = { index = "pypi" }
+mistralai-search-toolkit-plugins-vespa = { index = "pypi" }
+mistralai-search-toolkit-storage-s3 = { index = "pypi" }
+mistralai-search-toolkit-storage-gcs = { index = "pypi" }
+mistralai-search-toolkit-storage-azure = { index = "pypi" }
+mistralai-workflows-plugins-search = { index = "pypi" }
+mistral-common = { index = "pypi" }
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+default = true
+
+[build-system]
+requires = ["uv_build>=0.8.22,<0.9.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+# The dist name is fixed by the CLI convention (= `<registry id>-<kind>-<capability id>`);
+# `module-name` keeps the IMPORT path unchanged so no vendored app file has to
+# be edited.
+# `namespace = true` makes this a PEP-420 portion so the sibling capability
+# dists can each ship their own slice of `mistralai_capabilities`.
+module-name = "mistralai_capabilities.search"
+namespace = true

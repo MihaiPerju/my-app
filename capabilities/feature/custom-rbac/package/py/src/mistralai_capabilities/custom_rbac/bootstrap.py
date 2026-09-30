@@ -1,0 +1,45 @@
+"""Idempotent bootstrap of the RBAC store: keep the configured admins admin.
+
+Meant to run from an init step at startup (the repo's ``scripts/init`` init container), so a
+fresh deployment has its admins without a manual step, and a bootstrap admin who was accidentally
+demoted is restored on the next run (self-heal). Only the configured emails are touched; every
+other principal is left exactly as the admin panel set it. The email match is case-insensitive,
+so a configured ``Admin@x`` never creates a duplicate of a stored ``admin@x``.
+"""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import Iterable
+
+from .store import DuplicatePrincipalError, RbacStore
+
+log = logging.getLogger("access.bootstrap")
+
+
+async def ensure_bootstrap(store: RbacStore, admin_emails: Iterable[str]) -> None:
+    """Ensure each configured email exists and is an admin (create or re-promote)."""
+    emails = list(dict.fromkeys(e.strip() for e in admin_emails if e.strip()))
+    existing = {p.email.lower(): p for p in await store.principals_by_emails(emails)}
+    for email in emails:
+        principal = existing.get(email.lower())
+        if principal is None:
+            try:
+                principal = await store.create_principal(email=email, name="", is_admin=True)
+                log.info("admin_created email=%s", email)
+            except DuplicatePrincipalError:
+                # A concurrent init run inserted it between the read and this write: adopt that row.
+                principal = (await store.principals_by_emails([email]))[0]
+            # Record it so a case-insensitive duplicate later in the list ("a@x,A@x") reuses it
+            # instead of re-attempting the unique insert.
+            existing[email.lower()] = principal
+        if not principal.is_admin:
+            # A protected admin was demoted; restore it so no one can lock the bootstrap admins out.
+            assert principal.id is not None
+            await store.set_admin(principal.id, True)
+            log.info("admin_restored email=%s", email)
+    if not emails and not await store.admin_emails():
+        log.warning(
+            "no_admin: CUSTOM_RBAC_BOOTSTRAP_ADMINS is empty and no principal is an admin, "
+            "so nobody can reach the admin API"
+        )

@@ -1,0 +1,47 @@
+@font-face {
+  font-family: "ALT Mistral";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/ALTMistral-Regular.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "ALT Mistral";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/ALTMistral-Italic.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "ALT Mistral";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./fonts/ALTMistral-Medium.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "ALT Mistral";
+  font-style: italic;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./fonts/ALTMistral-MediumItalic.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "ALT Mistral";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("./fonts/ALTMistral-Semibold.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "ALT Mistral";
+  font-style: italic;
+  font-weight: 600;
+  font-display: swap;
+  src: url("./fonts/ALTMistral-SemiboldItalic.woff2") format("woff2");
+}

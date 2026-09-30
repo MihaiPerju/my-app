@@ -1,0 +1,21 @@
+[project]
+name = "mistralai-capabilities-feature-experiments"
+version = "0.1.0"
+description = "Experiments capability: feature-agnostic experiment framework with named variants, content-addressed artifacts, and seed-based YAML loading."
+requires-python = ">=3.12,<3.15"
+license = "LicenseRef-Proprietary"
+dependencies = [
+    "pydantic>=2",
+    "pyyaml>=6",
+]
+
+[build-system]
+requires = ["uv_build>=0.8.22,<0.9.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "mistralai_capabilities.experiments"
+namespace = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

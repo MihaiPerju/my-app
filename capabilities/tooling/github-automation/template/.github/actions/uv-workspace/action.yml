@@ -1,0 +1,35 @@
+name: Set up uv workspace
+description: >-
+  Bootstrap both toolchains for a CI job: install uv and bun, authenticate the private Mistral index
+  (uv via UV_INDEX_*, bun via .npmrc), and install the Python workspace plus JS dependencies.
+  Centralizes the registry bootstrap so every CI job calls one action instead of copying the auth
+  setup — a single place to change when the auth format moves, and impossible for a new job to omit.
+runs:
+  using: composite
+  steps:
+    - name: Install uv
+      uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      with:
+        enable-cache: true
+        # renovate: datasource=github-releases depName=astral-sh/uv
+        version: "0.11.17"
+    # tools/uv.sh owns the per-index URL and Basic-auth username. Source it so CI and local installs
+    # use the same generated registry variant; the password remains the job-provided secret.
+    - name: Sync workspace
+      shell: bash
+      run: |
+        source tools/uv.sh
+        uv python install 3.14
+        uv sync --all-packages
+    - name: Install bun
+      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      with:
+        # renovate: datasource=npm depName=bun
+        bun-version: "1.4.0"
+    # Only a capability with private npm scopes ships .npmrc.example.
+    - name: Configure private npm registry
+      shell: bash
+      run: if [ -f .npmrc.example ]; then cp .npmrc.example .npmrc; fi
+    - name: Install JS dependencies
+      shell: bash
+      run: bun install --frozen-lockfile

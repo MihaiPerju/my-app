@@ -1,0 +1,24 @@
+[run]
+# The measured source is the app's own first-party code: every `packages/py/<name>/src` and every
+# Python `apps/<name>/src`. `tools/testing.sh` discovers the roots that exist and passes them as
+# `--cov=<root>`, so the list follows the installed capabilities and any package the app adds. A
+# fixed list here named packages that a selection may not install ("Module ... was never
+# imported"). Capability toolkits are installed dependencies, owned and tested by the registry that
+# publishes them, so they are never measured here.
+omit =
+    */tests/*
+    */conftest.py
+    # Alembic revisions are executed by `alembic upgrade`, never by pytest.
+    packages/py/db/src/db/migrations/*
+    # Process entrypoints are executed by the process manager (`python -m`, the worker container),
+    # never by pytest: each one only wires up and blocks on a long-running loop.
+    */entrypoints/*
+    */__main__.py
+branch = true
+
+[report]
+exclude_also =
+    if TYPE_CHECKING:
+    raise NotImplementedError
+    @(abc\.)?abstractmethod
+    if __name__ == .__main__.:

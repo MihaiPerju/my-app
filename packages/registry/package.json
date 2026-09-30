@@ -1,0 +1,10 @@
+{
+  "name": "@mistralai-capabilities/registry",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The mistralai-capabilities registry descriptor, packaged so the mistral apps CLI can bootstrap this registry from a package index instead of a git checkout.",
+  "license": "Apache-2.0",
+  "files": [
+    "registry.json"
+  ]
+}

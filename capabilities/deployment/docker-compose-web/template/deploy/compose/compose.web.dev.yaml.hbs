@@ -1,0 +1,43 @@
+# The web service, owned by the tanstack-start capability. Included by the root
+# compose.dev.yaml when tanstack-start is installed; shared postgres/init/gateway/bucket
+# come from the root compose file.
+
+services:
+  web:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.web
+      target: dev
+      secrets:
+        - registry_token
+    init: true
+    environment:
+      NODE_ENV: development
+      # The docker-compose-auth integration writes an explicit empty value for same-origin APISIX.
+      # Without auth, an unset value defaults to the loopback-published API.
+      VITE_API_URL: ${VITE_API_URL-http://localhost:${API_PORT:-3000}}
+    volumes:
+      - ../..:/app
+      - /app/node_modules
+      - /app/apps/web/node_modules
+    # Loopback-only: see the api service in compose.yaml.
+    ports:
+      - "127.0.0.1:${WEB_PORT:-3001}:3001"
+{{#if (has "fastapi")}}
+    depends_on:
+      api:
+        condition: service_healthy
+{{/if}}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3001/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 60s
+    restart: unless-stopped

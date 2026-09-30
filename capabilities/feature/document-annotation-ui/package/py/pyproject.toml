@@ -1,0 +1,57 @@
+[project]
+name = "mistralai-capabilities-feature-document-annotation-ui"
+version = "0.1.0"
+description = "Document Annotation UI capability: document OCR and schema-driven extraction activities backed by the Mistral SDK."
+requires-python = ">=3.12,<3.15"
+license = "LicenseRef-Proprietary"
+dependencies = [
+    "mistralai>=2.9.4",
+    "mistralai-workflows>=3.15.0",
+    "mistralai-workflows-plugins-mistralai>=3.15.0",
+    # Not imported here — declared so the binding below can reach it. uv applies
+    # `[tool.uv.sources]` to DIRECT requirements only, so an undeclared (transitive)
+    # `mistral-common` would have no pin on which index serves it. Retained as a directly-pinned
+    # dependency for that binding. See the longer write-up of the failure mode in
+    # `capabilities/search/package/py/pyproject.toml`.
+    "mistral-common[sentencepiece]>=1.10.0,<2.0.0",
+    "pydantic>=2",
+]
+
+# NOT declared: `mistralai-capabilities-database-bucket`, whose `bucket` package `storage.py` imports.
+# The CLI wires every selected toolkit into the app root as a path source, so declaring it here too
+# makes `uv lock` fail on the same distribution reached two ways — "conflicting URLs ... (editable)".
+# The edge is real but it is already carried where this registry carries edges: this capability
+# depends on `bucket` in `capability.json`, so the CLI cannot install this toolkit without that one.
+# Same reasoning as `capabilities/chat/package/py/pyproject.toml` and its `api` edge.
+
+# An optional extra rather than a base dep, matching `mistralai-capabilities-backend-fastapi`'s own split:
+# only `api.py` imports FastAPI, only the API host imports `api.py`, and the worker installs this
+# toolkit for its activities. Keeping the framework out of the base dist is what lets
+# `apps/worker/tests/test_no_web_framework_on_the_worker.py` stay true while this capability ships
+# an API-layer module. The app resolves FastAPI because `apps/api` declares it directly.
+[project.optional-dependencies]
+api = ["fastapi>=0.115"]
+
+
+# `mistral-common` is PyPI-only (the SDK-distribution index does not carry it), so it is pinned to
+# an explicit `pypi` index — the same binding `capabilities/search/package/py/pyproject.toml` makes.
+[tool.uv.sources]
+mistral-common = { index = "pypi" }
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+default = true
+
+[build-system]
+requires = ["uv_build>=0.8.22,<0.9.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+# The dist name is fixed by the CLI convention (= `<registry id>-<kind>-<capability id>`);
+# `module-name` keeps the IMPORT path unchanged so no vendored app file has to
+# be edited.
+# `namespace = true` makes this a PEP-420 portion so the sibling capability
+# dists can each ship their own slice of `mistralai_capabilities`.
+module-name = "mistralai_capabilities.document_annotation_ui"
+namespace = true

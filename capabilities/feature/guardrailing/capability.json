@@ -1,0 +1,42 @@
+{
+  "id": "guardrailing",
+  "version": "0.0.0",
+  "title": "Guardrailing",
+  "description": "Fail-closed prompt and response classification: guardrail activities, schemas and seed policy, backed by a pgvector similarity scanner.",
+  "kind": "feature",
+  "categories": [
+    "solutions"
+  ],
+  "dependencies": [
+    "core",
+    "postgres",
+    "agents",
+    "workflows"
+  ],
+  "packages": [
+    "ts",
+    "py"
+  ],
+  "envVars": {
+    "GUARDRAIL_ENABLED": "true",
+    "MISTRAL_API_KEY": "",
+    "GUARDRAIL_INPUT_ENABLED": "true",
+    "GUARDRAIL_OUTPUT_ENABLED": "false",
+    "GUARDRAIL_REFUSAL_MESSAGE": "I'm unable to help with that request.",
+    "GUARDRAIL_SIMILARITY_ENABLED": "true",
+    "GUARDRAIL_EMBEDDINGS_TABLE": "guardrail_embeddings",
+    "GUARDRAIL_SIMILARITY_THRESHOLD": "0.90",
+    "GUARDRAIL_SIMILARITY_TOP_K": "2",
+    "GUARDRAIL_LLM_MODEL": "mistral-small-latest",
+    "GUARDRAIL_MODERATION_MODEL": "mistral-moderation-latest",
+    "GUARDRAIL_MODERATION_CATEGORIES": "[]",
+    "GUARDRAIL_MODERATION_THRESHOLDS": "{}",
+    "GUARDRAIL_ALLOWED_TOPICS": "[]",
+    "GUARDRAIL_FORBIDDEN_TOPICS": "[]",
+    "GUARDRAIL_TIMEOUT_SECONDS": "15.0"
+  },
+  "metadata": {
+    "weight": 25,
+    "public": false
+  }
+}

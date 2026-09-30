@@ -1,0 +1,45 @@
+{
+  "id": "fastapi",
+  "version": "0.0.0",
+  "title": "FastAPI",
+  "description": "The app's HTTP backend: a generic FastAPI application at apps/api with the file-based router and health routes. Feature capabilities register their routers into it.",
+  "kind": "backend",
+  "module": {
+    "serve": "server",
+    "route": "/api",
+    "browser": false
+  },
+  "default": true,
+  "categories": [
+    "solutions"
+  ],
+  "dependencies": [
+    "core"
+  ],
+  "packages": [
+    "ts",
+    "py"
+  ],
+  "envVars": {
+    "CORS_ORIGIN": "http://localhost:3001"
+  },
+  "metadata": {
+    "weight": 1,
+    "appDir": "apps/api",
+    "port": 3000,
+    "build": {
+      "context": ".",
+      "dockerfile": "deploy/docker/Dockerfile.api",
+      "target": "api"
+    },
+    "lifecycle": {
+      "dev": {
+        "startCommand": "uv run --all-packages python -m api.dev"
+      },
+      "deploy": {
+        "startCommand": "uv run --frozen --no-dev --no-sync uvicorn api.main:app --host \"$HOST\" --port \"$PORT\" --proxy-headers --timeout-graceful-shutdown 20"
+      }
+    },
+    "public": false
+  }
+}

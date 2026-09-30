@@ -1,0 +1,128 @@
+name: Publish
+
+# Releases every capability on a version tag: the `@mistralai-capabilities/*` npm packages and the
+# per-capability Python dists, to both Gemfury and Cloudsmith. This file is only the trigger and the
+# version gate; `publish-core.yaml` is the pipeline, shared with the release-candidate publisher so
+# the two cannot drift.
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (e.g. 0.1.0). Its vX.Y.Z tag must already exist."
+        required: true
+        type: string
+      target:
+        description: "Upload destination. Internal retries Gemfury + Cloudsmith; public promotes to PyPI + npmjs only."
+        required: true
+        default: internal
+        type: choice
+        options:
+          - internal
+          - public
+      public_publish_confirmation:
+        description: "Type STAGE_NPM_AND_PUBLISH_PYPI to enable the protected public jobs."
+        required: false
+        default: ""
+        type: string
+
+# One release at a time, and never cancel one in flight. The group carries no ref, so two tags
+# pushed close together queue rather than run side by side. The newest-tag check below only holds
+# if the run that passes it is the only one publishing: side by side, a slow older release can move
+# the `latest` dist-tag backwards after a newer one has finished. GitHub keeps one pending run per
+# group, so a third release tag pushed while two are outstanding cancels the queued one.
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # The tag is the single source of truth for the released version. The dispatch input exists
+  # only to re-run a failed release, so resolve it back to an existing tag rather than stamping
+  # whichever branch happened to dispatch the workflow. The input is required, so a public release
+  # always names the version it is publishing: a dispatch runs from `main`, and inferring a version
+  # from `main` would publish whichever tag happened to be newest at the time.
+  version:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      ref: ${{ steps.ver.outputs.ref }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve version
+        id: ver
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          PUBLISH_TARGET: ${{ inputs.target }}
+          PUBLIC_PUBLISH_CONFIRMATION: ${{ inputs.public_publish_confirmation }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] &&
+             [ "$PUBLISH_TARGET" = public ] &&
+             [ "$PUBLIC_PUBLISH_CONFIRMATION" != STAGE_NPM_AND_PUBLISH_PYPI ]; then
+            echo "::error::public target requires public_publish_confirmation=STAGE_NPM_AND_PUBLISH_PYPI"
+            exit 1
+          fi
+          # Highest plain release version in the tag names on stdin, empty if there are none. `v*`
+          # also matches the candidate tags, which are not releases.
+          highest() { sed -n 's/^v\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)$/\1/p' | sort -V | tail -1; }
+
+          VERSION="${INPUT_VERSION:-${GITHUB_REF_NAME#v}}"
+          # Plain X.Y.Z only. A pre-release is not a release: candidates are named for a commit
+          # and published per-PR by `publish-rc.yaml`, which derives its own version. Rejecting
+          # one here is a gate on what a TAG may mean, not a spelling limitation.
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::'$VERSION' is not X.Y.Z (a pre-release tag is not a release: candidates are published per-PR by publish-rc.yaml)"
+            exit 1
+          fi
+          TAG="v${VERSION}"
+          if ! REF="$(git rev-parse --verify "refs/tags/${TAG}^{commit}")"; then
+            echo "::error::release tag '${TAG}' does not exist"
+            exit 1
+          fi
+          # Every plain X.Y.Z publishes under the npm `latest` dist-tag on all three npm indexes
+          # (scripts/release/publish-plan.ts), so releasing behind an existing tag would point new
+          # installs at older code. Re-running the newest release is still allowed.
+          NEWEST="$(git tag --list 'v*' | highest)"
+          if [ "$(printf '%s\n%s\n' "$VERSION" "$NEWEST" | sort -V | tail -1)" != "$VERSION" ]; then
+            echo "::error::v${VERSION} is behind the newest release tag v${NEWEST}; publishing it would move the 'latest' dist-tag backwards"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "Releasing $VERSION from $TAG ($REF)"
+
+  publish:
+    name: Publish
+    needs: version
+    permissions:
+      contents: write # the GitHub release
+      id-token: write # OIDC for Cloudsmith, npm trusted publishing, and PyPI
+    uses: ./.github/workflows/publish-core.yaml
+    with:
+      # The resolved tag commit supplies both release contents and every script
+      # that executes beside a publish credential, regardless of dispatch ref.
+      ref: ${{ needs.version.outputs.ref }}
+      publisher_ref: ${{ needs.version.outputs.ref }}
+      version: ${{ needs.version.outputs.version }}
+      github_release: true
+      # Tag pushes and the default manual target publish internally. Public promotion is a
+      # separate manual target, so it never replays Gemfury or Cloudsmith uploads.
+      publish_internal: >-
+        ${{ github.event_name == 'push' || inputs.target == 'internal' }}
+      # A tag can never satisfy this guard. Public publishing requires the explicit public target
+      # and the deliberately long confirmation string; protected-environment approvals follow.
+      publish_public: >-
+        ${{ github.event_name == 'workflow_dispatch' &&
+            inputs.target == 'public' &&
+            inputs.public_publish_confirmation == 'STAGE_NPM_AND_PUBLISH_PYPI' }}
+    secrets: inherit

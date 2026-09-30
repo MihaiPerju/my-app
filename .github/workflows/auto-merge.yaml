@@ -1,0 +1,85 @@
+name: Auto-merge PRs with MERGE NOW label
+
+on:
+  pull_request_review:
+    types: [submitted]
+  pull_request:
+    types: [labeled]
+
+concurrency:
+  group: auto-merge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  auto-merge:
+    if: contains(github.event.pull_request.labels.*.name, 'MERGE NOW')
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      X_PRIVATE_ACCESS_STAGING: ${{ secrets.X_PRIVATE_ACCESS_STAGING }}
+    steps:
+      - name: Checkout (for warden-token action)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+
+      - name: Get Warden token
+        id: warden
+        uses: mistralai/reusable-workflows/warden-token@ad395b3f672a2cfd23cbf5ce73eb10fbb015a985
+        env:
+          GEMFURY_DEPLOY_TOKEN: ${{ secrets.GEMFURY_DEPLOY_TOKEN }}
+        with:
+          repository: mistralai-capabilities
+          permissions: contents:write,pull_requests:write,workflows:write
+
+      - name: Check approval and merge
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.warden.outputs.token }}
+          script: |
+            const prNumber = context.payload.pull_request.number;
+
+            // Get all reviews for the PR
+            const reviews = await github.paginate(github.rest.pulls.listReviews, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+              per_page: 100,
+            });
+
+            // Check if the PR has at least one approval.
+            // Use the latest decisive review (APPROVED or CHANGES_REQUESTED) from each user.
+            // COMMENTED reviews are ignored because they do not change approval status.
+            const latestReviewByUser = {};
+            for (const review of reviews) {
+              if (review.state !== 'APPROVED' && review.state !== 'CHANGES_REQUESTED') continue;
+              const userId = review.user.id;
+              if (!latestReviewByUser[userId] || new Date(review.submitted_at) > new Date(latestReviewByUser[userId].submitted_at)) {
+                latestReviewByUser[userId] = review;
+              }
+            }
+
+            const hasApproval = Object.values(latestReviewByUser).some(
+              (review) => review.state === 'APPROVED'
+            );
+
+            if (!hasApproval) {
+              core.setFailed(`This PR has the "MERGE NOW" label but no approval. Ask for an approving review.`);
+              return;
+            }
+
+            core.info(`PR #${prNumber} has the "MERGE NOW" label and an approval. Attempting to merge...`);
+
+            try {
+              await github.rest.pulls.merge({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+                merge_method: 'squash',
+              });
+              core.info(`Successfully merged PR #${prNumber}`);
+            } catch (error) {
+              core.setFailed(`Failed to merge PR #${prNumber}: ${error.message}`);
+            }

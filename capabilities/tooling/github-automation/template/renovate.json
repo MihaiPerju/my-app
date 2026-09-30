@@ -1,0 +1,146 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":semanticCommits",
+    ":dependencyDashboard",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "timezone": "Europe/Paris",
+  "schedule": ["before 9am on monday"],
+  "prConcurrentLimit": 5,
+  "prHourlyLimit": 2,
+  "labels": ["dependencies"],
+  "rangeStrategy": "bump",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 9am on the first day of the month"]
+  },
+  "vulnerabilityAlerts": {
+    "labels": ["dependencies", "security"],
+    "schedule": ["at any time"]
+  },
+  "bun": { "enabled": true },
+  "npm": {
+    "enabled": true,
+    "minimumReleaseAge": "3 days"
+  },
+  "pep621": {
+    "enabled": true,
+    "managerFilePatterns": ["/(^|/)pyproject\\.toml$/"]
+  },
+  "customManagers": [
+    {
+      "description": "The bun and uv versions CI installs. These are `with:` inputs of setup-bun and setup-uv, which no native manager reads: without this, Renovate saw the SAME toolchain in the Dockerfiles and in package.json but not in the workflow, bumped the two it could see, and left CI installing the old one. Generic on purpose -- it keys off the `# renovate:` annotation rather than off the input name, so a new pinned input is tracked by adding the comment. It scans both the workflow files and the automation-owned composite actions under `.github/actions`, where the shared uv-workspace bootstrap pins its setup-uv version. The versions it finds are grouped with their Docker and packageManager counterparts below; the annotation is the coupling made visible in the file that would otherwise drift.",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/(workflows/[^/]+|actions/[^/]+/action)\\.ya?ml$/"],
+      "matchStrings": [
+        "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)\\s*\\n\\s*[\\w-]+:\\s*\"?(?<currentValue>[^\"\\s]+)\"?"
+      ]
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Private Mistral registries. Renovate cannot reach the npm and PyPI indexes pinned in .npmrc and pyproject.toml without their pull token, so left enabled these would produce a stream of lookup failures on the dependency dashboard. Disabled explicitly rather than left to fail: to turn them on, add a hostRules entry with an encrypted token for each host and delete this rule. Bumps are done by hand in the meantime (bun.lock via `bun update`, uv.lock via `bun run lock`).",
+      "matchPackageNames": [
+        "@mistralai/**",
+        "@mistral/**",
+        "mistralai",
+        "mistralai-agents",
+        "mistralai-guardrails",
+        "mistralai-workflows",
+        "mistralai-workflows-plugins-**",
+        "mistralai-demiurge",
+        "mistralai-vibe-sdk",
+        "mistral-vibe"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "The `mistralai-search-toolkit*` family is dual-published: the search capability's toolkit binds it to public PyPI on purpose, because the private index carries much older copies of the same names. Renovate can therefore see it, but the pre-release channel it tracks makes automatic bumps unsafe — surface them on the dashboard instead of opening PRs.",
+      "matchPackageNames": ["mistralai-search-toolkit**"],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "The bundled @mistral/* packages are vendored under packages/ts/ and pinned by `overrides` to workspace members. There is nothing for Renovate to resolve. Named one by one rather than globbed, so a first-party package added alongside them is still tracked.",
+      "matchFileNames": [
+        "packages/ts/common/**",
+        "packages/ts/i18n/**",
+        "packages/ts/markdown/**",
+        "packages/ts/next-hotkey/**"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Bun catalog entries live in the root package.json under workspaces.catalog and are the single source of version truth for every workspace member. Renovate's bun manager understands the `catalog:` protocol and edits the catalog itself; group those bumps so one PR moves a dependency everywhere at once.",
+      "matchManagers": ["bun"],
+      "matchDepTypes": ["catalog"],
+      "groupName": "bun catalog",
+      "commitMessageTopic": "bun catalog entry {{depName}}"
+    },
+    {
+      "description": "Dev tooling, both languages, in one weekly PR. These are build-time only: a bad bump breaks CI loudly and never ships, so they do not need the per-package review that runtime dependencies get.",
+      "matchPackageNames": [
+        "oxlint",
+        "oxlint-tsgolint",
+        "oxfmt",
+        "nx",
+        "typescript",
+        "@types/**",
+        "@hey-api/openapi-ts",
+        "@testing-library/**",
+        "@vitejs/plugin-react",
+        "vite",
+        "jsdom",
+        "ruff",
+        "ty",
+        "pytest",
+        "pytest-asyncio",
+        "pytest-cov",
+        "respx",
+        "pre-commit",
+        "uv-secure",
+        "watchfiles"
+      ],
+      "groupName": "dev tooling",
+      "semanticCommitType": "chore"
+    },
+    {
+      "description": "GitHub Actions are pinned to commit digests (helpers:pinGitHubActionDigests). One grouped PR keeps the CI workflow readable instead of one PR per action.",
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions",
+      "semanticCommitType": "ci",
+      "pinDigests": true
+    },
+    {
+      "description": "Docker base images are grouped so the shared Python and web runtimes move together; the uv and bun binaries have dedicated lockstep rules below.",
+      "matchManagers": ["dockerfile", "docker-compose"],
+      "groupName": "container base images",
+      "semanticCommitType": "build"
+    },
+    {
+      "description": "Bun is declared in FOUR places -- the image build (`COPY --from=oven/bun:`), `packageManager` in package.json, and two setup-bun steps in ci.yml -- and a bump that moves some but not all of them is the bug this rule exists to prevent: CI validated the lockfile on the pinned version while the image built on whatever the tag resolved to, and a bun that had never seen this lockfile 403'd on private @mistralai tarballs at install time. One PR moves all four or none. Last-match-wins ordering is load-bearing: this rule sits AFTER `container base images` so it claims the Docker dep out of that group. minimumReleaseAge is repeated here because the npm-manager setting above does not reach the regex-managed workflow sightings, and a split stability window would let Renovate open the partial PR this rule is meant to make impossible.",
+      "matchPackageNames": ["bun", "oven/bun"],
+      "groupName": "bun toolchain",
+      "semanticCommitType": "build",
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "uv, on the same footing as bun: the shared Python Dockerfile copies the binary in two stages and six ci.yml jobs install it, so eight sightings have to move together.",
+      "matchPackageNames": ["astral-sh/uv", "ghcr.io/astral-sh/uv"],
+      "groupName": "uv toolchain",
+      "semanticCommitType": "build",
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "React and its type packages move together or not at all; a split bump breaks the type-aware lint pass.",
+      "matchPackageNames": ["react", "react-dom", "@types/react", "@types/react-dom"],
+      "groupName": "react"
+    },
+    {
+      "description": "TanStack Start/Router/Query release in lockstep and the generated route tree depends on the pair matching.",
+      "matchPackageNames": ["@tanstack/**"],
+      "groupName": "tanstack"
+    }
+  ]
+}

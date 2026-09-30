@@ -1,0 +1,49 @@
+# The web service, owned by the tanstack-start capability. Included by the root
+# compose.yaml when tanstack-start is installed; shared postgres/init/gateway/bucket
+# come from the root compose file.
+
+services:
+  web:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.web
+      target: runtime
+      args:
+        # Auth writes an explicit empty value; without auth this bakes in the direct API origin.
+        VITE_API_URL: ${VITE_API_URL-http://localhost:${API_PORT:-3000}}
+        # The display name baked into the bundle, from the root .env that `mistral apps init` writes.
+        APP_NAME: ${APP_NAME:-}
+      secrets:
+        - registry_token
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    # Loopback-only, same reasoning as the api service above.
+    ports:
+      - "127.0.0.1:${WEB_PORT:-3001}:3001"
+    env_file:
+      - path: ../../apps/web/.env
+        required: false
+{{#if (has "fastapi")}}
+    depends_on:
+      api:
+        condition: service_healthy
+{{/if}}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3001/').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped

@@ -1,0 +1,37 @@
+{
+  "id": "mcp-apps",
+  "version": "0.0.0",
+  "title": "MCP Apps",
+  "description": "MCP Apps delivery for the FastAPI host: discovers app declarations, serves them at /mcp through the file router, and reconciles the app's self-connector.",
+  "kind": "feature",
+  "categories": [
+    "solutions"
+  ],
+  "dependencies": [
+    "core",
+    "fastapi",
+    "agents"
+  ],
+  "packages": [
+    "ts",
+    "py"
+  ],
+  "routes": [
+    {
+      "path": "/mcp",
+      "mcp": true
+    }
+  ],
+  "envVars": {
+    "MCP_APPS_ENABLED": "false",
+    "MCP_APP_UI_URL": "",
+    "MCP_CONNECTOR_NAME": "{{app_name}}",
+    "MCP_CONNECTOR_VISIBILITY": "shared_workspace",
+    "MCP_SERVER_URL": "http://localhost:3000/mcp"
+  },
+  "metadata": {
+    "weight": 20,
+    "public": false,
+    "appDir": "apps/api"
+  }
+}

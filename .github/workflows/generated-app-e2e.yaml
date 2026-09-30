@@ -1,0 +1,159 @@
+name: Generated-app e2e
+
+# Generate an app with every capability from this commit and check that it works.
+# `scripts/e2e/generate_app.py` runs static and build checks; `--boot` also runs invoke up ->
+# /api/health. Per-capability endpoint tests are not wired in yet, so boot and health is the shared
+# signal. `scripts/e2e/ensure_cli.py` obtains the `mistral` CLI from the public mistralai/cli
+# release (install.sh, checksum-verified, no auth). The harness reserves exit 75 for environment
+# faults, but a required CI check still fails when it could not run: an untested commit must not
+# become eligible for an RC.
+# Pin a release with the `CLI_VERSION` Actions variable; unset means latest.
+
+on:
+  workflow_dispatch: # manual runs stay available
+  # Run on every PR. The CLI installs from the public release with no secrets, so same-repo and fork
+  # PRs both do the full build, boot, and health check. A real network or asset fault is identified
+  # separately by the harness but still fails this required check. The run takes about 15-20 min.
+  # To reduce this cost, add a `paths:` filter for
+  # capabilities/** and scripts/e2e/**.
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  generated-app-3-14:
+    name: generated-app (3.14)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # Full E2E: generate app, bun install, web build, uv lock/sync, all nx tests,
+    # docker builds, helm chart, and boot the full container stack.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - name: Re-attach HEAD to a branch (mistral apps init needs a default branch)
+        env:
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: git checkout -B "$BRANCH"
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.0
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+          version: "0.11.17"
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+      - name: Free up disk space for the image build
+        run: |
+          df -h / | tail -1
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
+            /usr/share/swift /usr/local/share/powershell /usr/lib/jvm /opt/microsoft || true
+          sudo docker image prune -af >/dev/null 2>&1 || true
+          sudo apt-get clean || true
+          echo "after cleanup:"; df -h / | tail -1
+      - name: Install the mistral CLI (public release)
+        id: cli
+        env:
+          CLI_VERSION: ${{ vars.CLI_VERSION }}
+          CLI_PATH_OUT: ${{ runner.temp }}/mistral_cli_path
+        run: |
+          set +e
+          python3 scripts/e2e/ensure_cli.py
+          echo "code=$?" >>"$GITHUB_OUTPUT"
+          exit 0
+      - name: Generate an app and run its checks
+        id: e2e
+        if: ${{ steps.cli.outputs.code == '0' }}
+        env:
+          # The generated app pins the default index, Cloudsmith: npm sends the entitlement token
+          # as a bearer token, and uv as the Basic-auth password under the literal user `token`.
+          NODE_AUTH_TOKEN: ${{ secrets.CLOUDSMITH_ENTITLEMENT_TOKEN }}
+          MISTRAL_REGISTRY_TOKEN: ${{ secrets.CLOUDSMITH_ENTITLEMENT_TOKEN }}
+          UV_INDEX_MISTRALAI_USERNAME: token
+          UV_INDEX_MISTRALAI_PASSWORD: ${{ secrets.CLOUDSMITH_ENTITLEMENT_TOKEN }}
+          UV_PYTHON: "3.14"
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          CLI_PATH_OUT: ${{ runner.temp }}/mistral_cli_path
+        run: |
+          set +e
+          export MISTRAL_CLI="$(cat "${CLI_PATH_OUT}")"
+          python3 scripts/e2e/generate_app.py --boot
+          echo "code=$?" >>"$GITHUB_OUTPUT"
+          exit 0
+      - name: Report
+        run: |
+          code="${{ steps.e2e.outputs.code || steps.cli.outputs.code }}"
+          case "${code}" in
+            0) echo "::notice::generated app builds, boots, and is healthy" ;;
+            75)
+              echo "::error::environment could not run the required check (CLI, network or auth)"
+              exit 1
+              ;;
+            *) echo "::error::the generated app failed its checks"; exit 1 ;;
+          esac
+
+  generated-app-3-12-python:
+    name: generated-app (3.12, Python-only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Focused Python check: generate app, uv lock/sync on Python 3.12, and run Python tests.
+    # Skips bun install, web build, docker builds, helm chart, and boot to avoid duplicating
+    # the full E2E harness. Only exercises the Python 3.12 floor for dependency resolution and
+    # test execution.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - name: Re-attach HEAD to a branch (mistral apps init needs a default branch)
+        env:
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: git checkout -B "$BRANCH"
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.0
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+          version: "0.11.17"
+      - name: Install the mistral CLI (public release)
+        id: cli
+        env:
+          CLI_VERSION: ${{ vars.CLI_VERSION }}
+          CLI_PATH_OUT: ${{ runner.temp }}/mistral_cli_path
+        run: |
+          set +e
+          python3 scripts/e2e/ensure_cli.py
+          echo "code=$?" >>"$GITHUB_OUTPUT"
+          exit 0
+      - name: Generate app and run Python checks on 3.12
+        id: e2e
+        if: ${{ steps.cli.outputs.code == '0' }}
+        env:
+          # The generated app pins the default index, Cloudsmith: npm sends the entitlement token
+          # as a bearer token, and uv as the Basic-auth password under the literal user `token`.
+          NODE_AUTH_TOKEN: ${{ secrets.CLOUDSMITH_ENTITLEMENT_TOKEN }}
+          MISTRAL_REGISTRY_TOKEN: ${{ secrets.CLOUDSMITH_ENTITLEMENT_TOKEN }}
+          UV_INDEX_MISTRALAI_USERNAME: token
+          UV_INDEX_MISTRALAI_PASSWORD: ${{ secrets.CLOUDSMITH_ENTITLEMENT_TOKEN }}
+          UV_PYTHON: "3.12"
+          CLI_PATH_OUT: ${{ runner.temp }}/mistral_cli_path
+        run: |
+          set +e
+          export MISTRAL_CLI="$(cat "${CLI_PATH_OUT}")"
+          # Run only the Python-focused checks: generate app, uv lock/sync, Python tests.
+          # Skip bun install, web builds, docker, helm, and boot.
+          python3 scripts/e2e/generate_app.py --python-only
+          echo "code=$?" >>"$GITHUB_OUTPUT"
+          exit 0
+      - name: Report
+        run: |
+          code="${{ steps.e2e.outputs.code || steps.cli.outputs.code }}"
+          case "${code}" in
+            0) echo "::notice::generated app Python 3.12 checks passed" ;;
+            75)
+              echo "::error::environment could not run the required check (CLI, network or auth)"
+              exit 1
+              ;;
+            *) echo "::error::the generated app Python 3.12 checks failed"; exit 1 ;;
+          esac

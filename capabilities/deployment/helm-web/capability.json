@@ -1,0 +1,22 @@
+{
+  "id": "helm-web",
+  "version": "0.0.0",
+  "title": "Helm — Web",
+  "description": "Helm × Web integration. Owns the web subchart adapter at deploy/helm/app/charts/web. Hidden: it activates automatically when both helm and tanstack-start are effective, and selecting it directly is shorthand for that pair. Template-only; delivered through the Git source.",
+  "kind": "deployment",
+  "visible": false,
+  "activatedWhen": {
+    "allOf": [
+      "helm",
+      "tanstack-start"
+    ]
+  },
+  "categories": [
+    "solutions"
+  ],
+  "packages": [],
+  "metadata": {
+    "weight": 52,
+    "public": false
+  }
+}

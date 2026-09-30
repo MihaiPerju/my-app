@@ -1,0 +1,31 @@
+name: Helm
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: helm-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  helm-checks:
+    name: Helm render + schema validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install kubeconform
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          GOBIN="$RUNNER_TEMP/bin" go install github.com/yannh/kubeconform/cmd/kubeconform@v0.7.0
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      # Raw, not `bunx nx run helm:validate`: this job installs no Python toolchain, and the script is
+      # already a one-command local repro. The task exists as a convenience alias for humans.
+      - name: Validate default and production manifests
+        run: bash tools/validate-helm.sh

@@ -1,0 +1,20 @@
+{
+  "id": "testing",
+  "version": "0.0.0",
+  "title": "Testing",
+  "description": "The generated app's test infrastructure: Pytest with async and coverage plugins, the shared pytest bootstrap (conftest), the coverage ratchet helper, the generated-workspace contract tests, and the discovered test/coverage task commands. Template-only: it ships no published package, only files vendored into the app through the Git source.",
+  "kind": "tooling",
+  "default": true,
+  "categories": [
+    "solutions"
+  ],
+  "dependencies": [
+    "core"
+  ],
+  "packages": [],
+  "envVars": {},
+  "metadata": {
+    "weight": 61,
+    "public": false
+  }
+}

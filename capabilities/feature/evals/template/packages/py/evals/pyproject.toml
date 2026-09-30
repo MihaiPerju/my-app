@@ -1,0 +1,33 @@
+[project]
+name = "app-evals"
+version = "0.1.0"
+requires-python = ">=3.12,<3.15"
+dependencies = [
+    "mistralai>=2.9.4",
+    # The ONE workflows plugin the Agents SDK does not vendor (it ships mistralai, nuage_v2 and
+    # webhook, per its RECORD), and `evals.scorers` imports it directly. It drags
+    # mistralai-workflows back in transitively, which is harmless: the copy that collides with the
+    # SDK's vendored tree is plugins-mistralai, pulled by the `[mistralai]` extra we no longer ask
+    # for — not the core distribution.
+    # Public PyPI, successor of the private `mistralai-workflows-plugins-evaluation` (0.4.0 of which
+    # is 0.5.0 of this name). It pulls the public `mistralai-evaluations` SDK in place of the private
+    # `mistralai-observability`, so no private transitive has to be declared here any more.
+    # 0.6.1 is excluded: it imports `mistralai.evaluations.optimization.types.EvaluationRequest`,
+    # which no published `mistralai-evaluations` (through 0.8.2) ships, so it fails at import. The
+    # cap holds the OptimizeResult shape (verdict/winner/best_attempt, OptimizeVariant.system/gain)
+    # that workflows/optimize.py reads.
+    "mistralai-workflows-plugins-evaluations>=0.6.0,!=0.6.1,<0.7",
+]
+
+[tool.uv.sources]
+# Public PyPI. Other indexes carry this name too, so the binding keeps it on the public release.
+mistralai-workflows-plugins-evaluations = { index = "pypi" }
+
+[build-system]
+requires = ["uv_build>=0.8.22,<0.9.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+# Dist renamed to `app-evals` so it cannot collide with the `evals` CAPABILITY
+# dist; `module-name` keeps the import path `evals` so no app code changes.
+module-name = "evals"

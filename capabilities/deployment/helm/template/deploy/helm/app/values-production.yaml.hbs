@@ -1,0 +1,171 @@
+# Example PRODUCTION overrides for {{projectName}} (umbrella chart).
+# Apply with:  helm upgrade --install mistralai-capabilities deploy/helm/app \
+#                -n mistralai-capabilities -f deploy/helm/app/values-production.yaml
+#
+# Secret VALUES are NOT set here. Inject them from CI (Azure OIDC / your vault):
+#   --set-string secrets.data.mistral-api-key="$MISTRAL_API_KEY" \
+#   --set-string secrets.data.database-url="$DATABASE_URL"
+# ...or use secrets.externalSecrets (preferred in prod).
+
+# -----------------------------------------------------------------------------
+# Shared config merged into every subchart.
+# -----------------------------------------------------------------------------
+global:
+  baseDomain: "abraxas.mistralsol.com"
+
+  image:
+    registry: "cdn-images.mistralai.com"
+    # Pin the release tag in CI; do not use "latest" in production.
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+
+  # Registry pull secret must exist (or set imageCredentials.create=true and inject creds).
+  imagePullSecrets:
+    - name: mistral-registry
+
+  serviceAccount:
+    create: true
+    automountServiceAccountToken: false
+
+  # Prefer External Secrets in production.
+  secrets:
+    externalSecrets:
+      enabled: true
+
+{{#if (has "auth")}}
+  # Ingress host used for CORS and edge routing.
+  ingress:
+    host: "{{projectName}}.abraxas.mistralsol.com"
+{{/if}}
+
+  # Managed Postgres in production (do NOT deploy in-chart).
+  postgres:
+    deploy: false
+    host: "mistralai-capabilities-pg.postgres.database.azure.com"
+    port: 5432
+
+# -----------------------------------------------------------------------------
+# Parent-owned resources.
+# -----------------------------------------------------------------------------
+serviceAccount:
+  create: true
+  annotations:
+    # GKE Workload Identity — replace with your GCP service account.
+    iam.gke.io/gcp-service-account: "mistralai-capabilities@my-project.iam.gserviceaccount.com"
+
+secrets:
+  create: false
+  externalSecrets:
+    enabled: true
+    refreshInterval: "1h"
+    secretStoreRef:
+      name: "gcp-secret-store"
+      kind: ClusterSecretStore
+    data:
+      - secretKey: mistral-api-key
+        remoteRef:
+          key: prod/{{projectName}}/mistral-api-key
+      - secretKey: gemfury-token
+        remoteRef:
+          key: prod/{{projectName}}/gemfury-token
+      - secretKey: github-connector-token
+        remoteRef:
+          key: prod/{{projectName}}/github-connector-token
+      - secretKey: slack-connector-token
+        remoteRef:
+          key: prod/{{projectName}}/slack-connector-token
+      - secretKey: notion-connector-token
+        remoteRef:
+          key: prod/{{projectName}}/notion-connector-token
+      - secretKey: database-url
+        remoteRef:
+          key: prod/{{projectName}}/database-url
+{{#if (has "auth")}}
+      # APISIX gateway auth material (edge). Both are required; the session key
+      # must NOT be the same value as the client secret.
+      - secretKey: oidc-client-secret
+        remoteRef:
+          key: prod/{{projectName}}/oidc-client-secret
+      - secretKey: gateway-session-secret
+        remoteRef:
+          key: prod/{{projectName}}/gateway-session-secret
+{{/if}}
+
+{{#if (has "auth")}}
+ingress:
+  enabled: true
+  className: "apisix"
+  host: "{{projectName}}.abraxas.mistralsol.com"
+  tls:
+    enabled: true
+    clusterIssuer: "mistral-abraxas-cloudflare"
+  oidc:
+    enabled: true
+    issuerUrl: "https://auth.abraxas.mistralsol.com/realms/mistral"
+    clientId: "{{projectName}}"
+
+networkPolicy:
+  enabled: true
+  defaultDeny: true
+  allowDNS: true
+
+# Edge auth via the standalone APISIX gateway. issuerUrl/clientId are inherited
+# from ingress.oidc.* above (single source of truth); the client secret comes
+# from the ExternalSecret key oidc-client-secret.
+gateway:
+  enabled: true
+  replicaCount: 2
+{{/if}}
+
+# -----------------------------------------------------------------------------
+# Per-subchart overrides.
+# -----------------------------------------------------------------------------
+api:
+  replicaCount: 3
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 70
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 1Gi
+
+web:
+  replicaCount: 3
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 12
+    targetCPUUtilizationPercentage: 70
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 1Gi
+
+workflows:
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+
+init:
+  enabled: true
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi

@@ -1,0 +1,22 @@
+{
+  "id": "k3d-auth",
+  "version": "0.0.0",
+  "title": "k3d — Auth",
+  "description": "k3d × Auth integration. Owns the local-cluster identity resources the k3d run stands up before the umbrella chart: the in-cluster dev Keycloak Deployment/Service with its gateway-to-Keycloak egress NetworkPolicy (deploy/k3d/keycloak.yaml) and the realm import (deploy/k3d/realm.json) that tools/k3d-up.sh retargets and applies. Hidden: it activates automatically when both k3d and auth are effective; because k3d depends on auth (its run proves a login), this always co-activates with a k3d selection while keeping the Keycloak identity artifacts out of the generic k3d root. Template-only; delivered through the Git source.",
+  "kind": "deployment",
+  "visible": false,
+  "activatedWhen": {
+    "allOf": [
+      "k3d",
+      "auth"
+    ]
+  },
+  "categories": [
+    "solutions"
+  ],
+  "packages": [],
+  "metadata": {
+    "weight": 54,
+    "public": false
+  }
+}

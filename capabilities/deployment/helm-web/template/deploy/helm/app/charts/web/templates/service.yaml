@@ -1,0 +1,3 @@
+{{- if .Values.enabled }}
+{{- include "common.service" (dict "root" . "component" "web" "workload" .Values) }}
+{{- end }}

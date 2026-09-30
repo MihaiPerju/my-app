@@ -1,0 +1,28 @@
+[project]
+name = "mistralai-capabilities-feature-custom-rbac"
+version = "0.1.0"
+description = "Authorization core: the pure RBAC domain (permissions + scoping, IO-free) and the Postgres-backed resolver/store behind the runtime's Protocol seams."
+license = "LicenseRef-Proprietary"
+requires-python = ">=3.12,<3.15"
+# Real third-party deps only. `domain` is pure; `store`/`policy` import sqlalchemy + sqlmodel for the
+# async RBAC queries, and the api layer's schemas use pydantic. `db` (app-local) and
+# `mistralai_capabilities.fastapi` (sibling capability) are wired by the CLI via `capability.json`
+# `dependencies`, not declared here (declaring a sibling dist twice breaks `uv lock`, per chat/api).
+dependencies = ["pydantic>=2", "sqlalchemy>=2", "sqlmodel>=0.0.22"]
+
+# FastAPI as an extra, not a base dep (like `api`/`chat`): only the `api/` layer imports it, and a
+# worker installing the base dist must never pull a web framework. The app resolves FastAPI because
+# apps/api declares it into the shared workspace environment.
+[project.optional-dependencies]
+api = ["fastapi>=0.115"]
+
+[build-system]
+requires = ["uv_build>=0.8.22,<0.9.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+# Dist name is fixed by the CLI convention (= `<registry id>-<kind>-<capability id>`); `module-name`
+# decouples the IMPORT path from it. `namespace = true` makes this a PEP-420 portion so it ships
+# only the `mistralai_capabilities.custom_rbac` slice alongside the sibling capabilities.
+module-name = "mistralai_capabilities.custom_rbac"
+namespace = true

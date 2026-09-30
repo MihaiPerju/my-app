@@ -1,0 +1,34 @@
+[tool.uv.workspace]
+members = ["capabilities/*/*/package/py"]
+
+[tool.uv]
+# Gemfury's simple index serves no upload dates. Under an `exclude-newer` cutoff (set by
+# `UV_EXCLUDE_NEWER` in every Mistral dev shell and, for this repo, by the framework-check job),
+# uv refuses any candidate it cannot date. So `uv sync --all-packages` fails on the private
+# packages with "has no publish time", even though they are published and pinned. Exempt them by
+# name. The cutoff still applies to everything from public PyPI, where the supply-chain risk lives.
+#
+# The list is every Mistral-owned distribution, not only the Gemfury-hosted ones. `exclude-newer`
+# defends against a hostile or typosquatted upload landing before anyone notices; for a package
+# Mistral publishes itself that threat model does not apply, and holding first-party releases
+# behind the window only delays our own fixes. The tradeoff is accepted deliberately: an exempt
+# package always resolves to its newest release, so a first-party publish can invalidate `uv.lock`
+# and require a re-lock.
+exclude-newer-package = { mistral-vibe = false, mistralai = false, mistralai-agents = false, mistralai-evaluations = false, mistralai-guardrails = false, mistralai-search-toolkit = false, mistralai-search-toolkit-plugins-postgres = false, mistralai-search-toolkit-plugins-vespa = false, mistralai-search-toolkit-storage-azure = false, mistralai-search-toolkit-storage-gcs = false, mistralai-search-toolkit-storage-s3 = false, mistralai-vibe-harness = false, mistralai-vibe-local-harness = false, mistralai-vibe-sdk = false, mistralai-workflows = false, mistralai-workflows-plugins-evaluations = false, mistralai-workflows-plugins-mistralai = false, mistralai-workflows-plugins-search = false, mistral-common = false }
+# GHSA-537c-gmf6-5ccf: cryptography wheels below 48.0.1 statically link a vulnerable OpenSSL. The
+# workflows toolkit's `mistralai[workflow-payload-encryption]` extra caps `cryptography<47.0.0`, so
+# a constraint would be unsatisfiable; override it, exactly as core's app template does. The payload
+# encoder only uses `AESGCM` and `InvalidTag`, unchanged in 48.x+.
+override-dependencies = ["cryptography>=48.0.1"]
+
+# Declared only so `[tool.uv.sources]` has a name to bind to; `UV_DEFAULT_INDEX` still outranks it.
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+default = true
+
+# The Socket mirror 403s this name's wheel `.metadata`, which breaks `uv lock --upgrade`. Binding it
+# to a named index is the only fix: the environment outranks `default = true` but cannot retarget a
+# named index.
+[tool.uv.sources]
+mistralai-workflows = { index = "pypi" }

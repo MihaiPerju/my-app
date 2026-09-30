@@ -1,0 +1,49 @@
+# Off by default; the umbrella sets `web.enabled: true` only when the `tanstack-start` capability is selected.
+enabled: false
+replicaCount: 2
+image:
+  repository: "docker/solutions/{{projectName}}-web"
+  tag: ""
+  pullPolicy: ""
+ports:
+  enabled: true
+containerPort: 3001
+service:
+  type: ClusterIP
+  port: 3001
+command: []
+args: []
+env:
+  NODE_ENV: "production"
+  HOST: "0.0.0.0"
+  PORT: "3001"
+  # The display name the web server renders (title, sidebar brand); read at request time.
+  APP_NAME: "{{projectName}}"
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 768Mi
+writableVolumes:
+  - name: tmp
+    mountPath: /tmp
+  - name: cache
+    mountPath: /home/node/.cache
+probes:
+  enabled: true
+  path: "/"
+  initialDelaySeconds: 10
+  periodSeconds: 10
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 8
+  targetCPUUtilizationPercentage: 75
+podSecurityContext: {}
+containerSecurityContext: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+podAnnotations: {}

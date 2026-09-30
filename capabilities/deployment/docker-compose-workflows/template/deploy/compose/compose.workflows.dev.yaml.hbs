@@ -1,0 +1,64 @@
+# The workflows service, owned by the workflows capability. Included by the root
+# compose.dev.yaml when workflows is installed; shared init/gateway/bucket come from the root
+# compose file.
+
+services:
+  workflows:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.worker
+      target: workflows-dev
+      args:
+        REGISTRY_PY_USER: ${MISTRAL_REGISTRY_USER:-}
+      secrets:
+        - registry_token
+    init: true
+    env_file:
+      # Keep Workflow tracing opt-in without masking the generated root .env. Compose applies
+      # env_file entries in order, so Observability's OTEL_ENABLED=true wins when present.
+      - path: workflows.defaults.env
+      - path: ../../.env
+        required: false
+    environment:
+{{#if (has "observability")}}      # Workflows owns the global provider; SDK spans must join it.
+      MISTRAL_SDK_TELEMETRY: "global"
+{{/if}}
+{{#if (has "postgres")}}      DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
+      SEARCH_BACKEND: postgres
+{{/if}}      # In-network address, pinned: the root .env's MCP_SERVER_URL names the host (localhost).
+      MCP_SERVER_URL: http://api:3000/mcp
+      MCP_APPS_ENABLED: ${MCP_APPS_ENABLED:-0}
+      # The SDK health server, as in the runtime overlay: the healthcheck below probes it.
+      HEALTH_SERVER_HOST: 127.0.0.1
+      HEALTH_SERVER_PORT: "3001"
+      HOME: /tmp
+      UV_NO_SYNC: "1"
+      WATCHFILES_FORCE_POLLING: "true"
+      # When the `bucket` profile is on, the worker runs in a container and reaches the bucket store
+      # over the compose network as `bucket:9000`, not the host's 127.0.0.1 from .env. This
+      # `environment:` value overrides the .env one; ignored unless INGESTION_STORAGE_BACKEND=s3.
+      INGESTION_S3_ENDPOINT_URL: http://bucket:9000
+    volumes:
+      - ../..:/app
+      - /app/.venv
+    depends_on:
+{{#if (has "postgres")}}      postgres:
+        condition: service_healthy
+{{/if}}      init:
+        condition: service_completed_successfully
+    # watchfiles outlives a worker that dies at startup (it waits for the next edit), so without a
+    # probe a crashed worker shows as "Up". The SDK health server only answers once the worker runs,
+    # so the container reports unhealthy instead. Nothing gates on it: init-* use service_started.
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:3001/health', timeout=5).status==200 else 1)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped

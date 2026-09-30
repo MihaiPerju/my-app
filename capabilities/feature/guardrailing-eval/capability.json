@@ -1,0 +1,25 @@
+{
+  "id": "guardrailing-eval",
+  "version": "0.0.0",
+  "title": "Guardrailing Eval",
+  "description": "Measure moderation/guardrail policy quality: shared Evaluator/RunEvaluator metrics (macro-F1, unsafe-recall, fp-on-safe, over-blocking, per-group accuracy), a fail-closed label contract, and a scanner->harness seam on mistralai.evaluations. Extracted from the duplicated uc and 4lm moderation harnesses.",
+  "kind": "feature",
+  "default": false,
+  "categories": [
+    "solutions"
+  ],
+  "dependencies": [
+    "core",
+    "evals",
+    "guardrailing"
+  ],
+  "packages": [
+    "ts",
+    "py"
+  ],
+  "envVars": {},
+  "metadata": {
+    "weight": 35,
+    "public": false
+  }
+}

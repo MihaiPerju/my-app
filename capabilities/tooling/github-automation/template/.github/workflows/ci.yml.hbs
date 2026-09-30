@@ -1,0 +1,210 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-$\{{ github.workflow }}-$\{{ github.ref }}
+  cancel-in-progress: true
+
+# Private Mistral registry auth. `uv` authenticates the `mistralai` index from pyproject.toml via
+# UV_INDEX_<NAME>_USERNAME/PASSWORD, not UV_EXTRA_INDEX_URL, which would re-register the private host
+# as a general index and undo the dependency-confusion hardening. `bun` reads .npmrc via
+# NODE_AUTH_TOKEN. Both derive from the same pull token for whichever private index this app was
+# generated from. The Basic-auth username is pinned in core's `tools/uv.sh`, which the shared
+# bootstrap action sources before syncing.
+env:
+  MISTRAL_REGISTRY_TOKEN: $\{{ secrets.MISTRAL_REGISTRY_TOKEN }}
+  UV_INDEX_MISTRALAI_PASSWORD: $\{{ secrets.MISTRAL_REGISTRY_TOKEN }}
+  NODE_AUTH_TOKEN: $\{{ secrets.MISTRAL_REGISTRY_TOKEN }}
+
+jobs:
+  py-lint:
+    name: Python lint + format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set up uv workspace
+        uses: ./.github/actions/uv-workspace
+      - name: ruff check + format --check
+        run: bunx nx run quality:lint && bunx nx run quality:fmt-check
+
+  py-typecheck:
+    name: Python typecheck (ty)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set up uv workspace
+        uses: ./.github/actions/uv-workspace
+      - name: ty (workspace)
+        run: bunx nx run quality:typecheck
+
+  py-test:
+    name: Python unit tests (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set up uv workspace
+        uses: ./.github/actions/uv-workspace
+      - name: pytest
+        run: bunx nx run testing:test
+{{#if (has "agents")}}
+  agent-checks:
+    name: Agent typecheck + tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set up uv workspace
+        uses: ./.github/actions/uv-workspace
+      # apps/worker/src/worker/agents is the file-defined agent project. Its `(studio)` subagent slot files use
+      # flat imports and are path-loaded by the SDK, so ty/pytest run via `--directory apps/worker/src/worker/agents`
+      # (against the shared workspace env) rather than the workspace-wide quality/testing targets.
+      - name: ty + pytest (agents)
+        run: bunx nx run agents:typecheck && bunx nx run agents:test
+{{/if}}{{#if (has "tanstack-start")}}
+  ts-checks:
+    name: TypeScript lint + format + types
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          # renovate: datasource=npm depName=bun
+          bun-version: "1.4.0"
+{{#if (has "mistral-design-system")}}
+      - name: Configure private npm registry
+        run: cp .npmrc.example .npmrc
+{{/if}}
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: oxfmt --check
+        run: bunx oxfmt --check apps packages
+      # Build web first so the TanStack Router route tree (src/routeTree.gen.ts, gitignored) exists
+      # before type-aware linting/type-checking. Scoped to the web app — the only TS workspace member;
+      # the server's Python types are covered by the py-typecheck job.
+      - name: Build (route tree + outputs)
+        run: bunx nx run web:build
+      # Type-aware lint + type-check in one pass via oxlint + oxlint-tsgolint (replaces tsc --noEmit).
+      - name: oxlint (type-aware lint + type-check)
+        run: bunx oxlint --type-aware --type-check apps packages
+      - name: Web component and API-wrapper tests
+        run: bunx nx run web:test
+{{#if (has "fastapi")}}
+
+  gen-types-drift:
+    name: Generated TS types are up to date
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set up uv workspace
+        uses: ./.github/actions/uv-workspace
+      - name: Install bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          # renovate: datasource=npm depName=bun
+          bun-version: "1.4.0"
+{{#if (has "mistral-design-system")}}
+      - name: Configure private npm registry
+        run: cp .npmrc.example .npmrc
+{{/if}}
+      - name: Install JS dependencies
+        run: bun install --frozen-lockfile
+      - name: Verify OpenAPI and generated client are current
+        run: bunx nx run fastapi-tanstack-start:gen-types-check
+{{/if}}
+{{/if}}{{#if (has "postgres")}}
+  pg-contract:
+    name: Postgres (TimescaleDB) store contract
+    runs-on: ubuntu-latest
+    # py-test runs the shared search-store contract suite against the in-memory backend; this job
+    # also runs it against a real TimescaleDB to enforce local≡postgres parity in CI. The fixture
+    # creates the `vector`, `vectorscale`, `pg_textsearch` and `pg_trgm` extensions itself, so the
+    # image needs no init SQL, but it must be the HA image that ships vectorscale and pg_textsearch.
+    services:
+      postgres:
+        image: timescale/timescaledb-ha:pg18.4-ts2.29.0
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres -h 127.0.0.1"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      RUN_PG_CONTRACT: "1"
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/postgres
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set up uv workspace
+        uses: ./.github/actions/uv-workspace
+      - name: pytest (postgres store contract)
+        run: bunx nx run db:test-pg-contract
+{{/if}}{{#if (has "docker-compose")}}
+  e2e:
+    name: E2E smoke (docker compose, live Mistral)
+    runs-on: ubuntu-latest
+    needs: [py-lint, py-typecheck, py-test{{#if (has "agents")}}, agent-checks{{/if}}{{#if (has "tanstack-start")}}, ts-checks{{#if (has "fastapi")}}, gen-types-drift{{/if}}{{/if}}{{#if (has "postgres")}}, pg-contract{{/if}}]
+    timeout-minutes: 45
+    env:
+      MISTRAL_API_KEY: $\{{ secrets.MISTRAL_API_KEY }}
+      # Keep the stack up on exit so we can capture logs; we tear it down explicitly.
+      KEEP_UP: "1"
+      # Deterministic route checks (HTTP 200); skip the optional Playwright render.
+      USE_PLAYWRIGHT: "0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+{{#if (has "mistral-design-system")}}
+      # The web/agent image builds do `COPY . .` then `bun install`, which needs
+      # .npmrc (gitignored) in the build context to auth to the private registry.
+      # bun expands ${NODE_AUTH_TOKEN} at install time from the BuildKit secret.
+      - name: Configure private npm registry
+        run: cp .npmrc.example .npmrc
+{{/if}}
+      # Compose services load runtime env from ../../.env (env_file, gitignored), so provide the live
+      # key for the document_ai workflow step.
+      #
+      # The encryption key is generated per run rather than stored as a secret: compose sets
+      # WORKFLOWS_ENCRYPTION_MODE=full and `mistralai_capabilities.workflows.encryption` fails closed without a key. The stack
+      # is torn down with `down -v`, so nothing encrypted outlives the job. api and workflows both
+      # read this file so they agree — a key only one had would encrypt payloads the other cannot read.
+      - name: Provide runtime .env
+        run: |
+          printf 'MISTRAL_API_KEY=%s\n' "$MISTRAL_API_KEY" > .env
+          printf 'WORKFLOWS_ENCRYPTION_KEY=%s\n' "$(openssl rand -hex 32)" >> .env
+      # Raw: this job installs no uv Python toolchain.
+      - name: Run full-stack smoke
+        run: bash tools/smoke.sh
+      - name: Collect compose logs
+        if: always()
+        run: |
+          docker compose -p scapp-smoke -f deploy/compose/compose.yaml logs --no-color > compose-logs.txt 2>&1 || true
+      - name: Upload compose logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: e2e-compose-logs
+          path: compose-logs.txt
+          if-no-files-found: ignore
+      - name: Tear down stack
+        if: always()
+        run: docker compose -p scapp-smoke -f deploy/compose/compose.yaml down -v || true
+{{/if}}

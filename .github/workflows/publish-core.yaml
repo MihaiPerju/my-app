@@ -1,0 +1,600 @@
+name: Publish (core)
+
+# The publish pipeline itself, with no trigger of its own. Two callers drive it:
+# `publish.yaml` on a release tag, and `publish-rc.yaml` on a pull request whose
+# checks all went green. It is one workflow rather than two copies because every
+# fact this file encodes -- which artifacts exist, which index gets which
+# descriptor variant, how a duplicate upload is a skip -- is a fact a second copy
+# would get wrong later, in silence, while staying green.
+#
+# Artifacts are built once and published twice, so both registries serve
+# byte-identical files -- except the two packages that cannot be: the descriptor
+# (`sources` names the host a consumer installs from) and `core` (its template
+# carries the app's `.npmrc` and uv index pins). Both are packed once per index
+# (scripts/release/package-registries.ts) and routed by the publish plan; cross-publishing
+# either would hand consumers a host they hold no credential for. Auth: Gemfury
+# uses a static token (GEMFURY_UPLOAD_TOKEN); Cloudsmith uses OIDC, provisioned in
+# iac-solutions (cloudsmith/config/cloudsmith_publishers.yaml). The Gemfury
+# DEPLOY token is read-only and returns 403 on push; only the UPLOAD token writes.
+#
+# PUBLIC-PUBLISH SAFETY. The npmjs and PyPI jobs are skipped unless a caller explicitly sets
+# `publish_public`; Gemfury and Cloudsmith are independently selected by `publish_internal`. The
+# release trigger never derives public publication from a tag: publish.yaml only selects it after
+# an explicit public-target manual dispatch and exact confirmation.
+# Every job that reaches a public index uses the protected `publish` environment,
+# which repository admins must configure with required reviewers,
+# prevent_self_review=true, and a deployment branch policy limiting it to `main`.
+# Dispatch the caller from `main`, not from the tag: the dispatched ref picks
+# which copy of these workflows runs, and the version job resolves the tag either
+# way. PyPI goes first, then npm: a PyPI project name is unreserved until
+# something uploads to it, and the npm bootstrap makes a new capability's name
+# public the moment it publishes the skeleton. Uploading to PyPI before that
+# closes the window in which the name can be taken. npm uploads are staged rather
+# than published, so the second approval still has a stage to inspect and reject
+# before anything becomes installable.
+#
+# TRUST BOUNDARY. `build` compiles `inputs.ref`, which for a release candidate is
+# a pull request's head commit: npm lifecycle scripts and PEP 517 backends there
+# are PR-authored code. That job therefore holds NO secrets. Credential-bearing
+# jobs that execute repository scripts check out `inputs.publisher_ref`: the
+# verified release-tag commit for a release, or the default-branch workflow SHA
+# for a candidate -- never `inputs.ref`. PR code is published, never executed
+# next to a token.
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: "Commit to build. Untrusted: it may be a pull request head."
+        required: true
+        type: string
+      publisher_ref:
+        description: "Trusted commit supplying scripts to credential-bearing jobs."
+        required: true
+        type: string
+      version:
+        description: "Version stamped into every package.json and pyproject.toml."
+        required: true
+        type: string
+      github_release:
+        description: "Create or update the GitHub release for v<version>."
+        required: false
+        default: false
+        type: boolean
+      publish_internal:
+        description: "Publish Gemfury and Cloudsmith artifacts. True for tags, RCs, and internal retries."
+        required: false
+        default: true
+        type: boolean
+      publish_public:
+        description: "Stage npmjs and publish PyPI artifacts. False unless manually confirmed."
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  build:
+    name: Build npm tarballs + Python dists
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.0
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.11.17"
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      # ONE version string for both ecosystems. It is legal npm semver and legal
+      # PEP 440 (which allows the `-` before a pre-release segment and drops it
+      # when it normalises), so `@0.1.3-rc52309221` and `==0.1.3-rc52309221`
+      # name the same candidate. `scripts/release/rc/version.ts` renders it; a release
+      # is a plain X.Y.Z and needs none of this. The same canonical build entry point
+      # runs in a temporary checkout for the public-artifact compliance check.
+      - name: Prepare and build publication artifacts
+        env:
+          VERSION: ${{ inputs.version }}
+        run: bun scripts/release/build-artifacts.ts "$VERSION"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish-gemfury:
+    name: Publish to Gemfury
+    needs: build
+    if: ${{ inputs.publish_internal }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    environment:
+      name: gemfury
+      url: https://npm.fury.io/mistralai/
+    steps:
+      # The upload scripts come from the caller's explicit trusted publisher
+      # commit, not from `inputs.ref`. Only the artifact below carries built PR code.
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ inputs.publisher_ref }}
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.0
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.11.17"
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist
+
+      # Written to the workspace root, not passed on the command line, so the token never reaches
+      # the process table or the step log. Do not substitute GEMFURY_DEPLOY_TOKEN: DEPLOY is the
+      # read-only install credential and Gemfury returns 403 when it is used for a push; UPLOAD is
+      # the write credential.
+      - name: Authenticate to Gemfury
+        env:
+          GEMFURY_UPLOAD_TOKEN: ${{ secrets.GEMFURY_UPLOAD_TOKEN }}
+        run: |
+          set -euo pipefail
+          {
+            echo "@mistralai-capabilities:registry=https://npm.fury.io/mistralai/"
+            echo "//npm.fury.io/mistralai/:_authToken=${GEMFURY_UPLOAD_TOKEN}"
+            echo "always-auth=true"
+          } > .npmrc
+
+      # publish-npm.ts derives each package's dist-tag from its version, so a
+      # candidate lands under `rc` and never moves `latest`.
+      - name: Publish npm packages
+        run: bun scripts/release/publish-npm.ts gemfury https://npm.fury.io/mistralai/
+
+      # zizmor: ignore[use-trusted-publishing] — Gemfury does not support it.
+      # --check-url makes a re-run of an already-published version a no-op, not a failure.
+      #
+      # Invariant: every artifact reaches a publisher as a path with a directory prefix, never a
+      # bare filename. A dist name derives from a capability's PR-controlled `[project] name`, so a
+      # bare name could be read as a CLI option. `dist/py/*` and the absolute paths publish-plan.ts
+      # prints cannot start with `-`, so this needs no `--` guard. A refactor to
+      # `cd dist/py && uv publish *.whl` would reintroduce the hazard.
+      - name: Publish Python dists
+        env:
+          UV_PUBLISH_USERNAME: mistralai
+          UV_PUBLISH_PASSWORD: ${{ secrets.GEMFURY_UPLOAD_TOKEN }}
+        run: |
+          set -euo pipefail
+          uv publish \
+            --publish-url https://push.fury.io/mistralai/ \
+            --check-url https://pypi.fury.io/mistralai/ \
+            dist/py/*
+
+  publish-cloudsmith:
+    name: Publish to Cloudsmith
+    needs: build
+    if: ${{ inputs.publish_internal }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # the Cloudsmith OIDC exchange
+    environment:
+      name: cloudsmith
+      url: https://cloudsmith.io/~mistral-ai/repos/sdk-distribution/packages/
+    steps:
+      # Explicit trusted publisher ref, for the same reason as Gemfury above.
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ inputs.publisher_ref }}
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.0
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist
+
+      - name: Authenticate to Cloudsmith via OIDC
+        uses: cloudsmith-io/cloudsmith-cli-action@159f1619275d5d3147f059c3cc110938ec221d16 # v2.0.3
+        with:
+          oidc-namespace: "mistral-ai"
+          oidc-service-slug: "gh-mistralai-capabilities-push"
+          oidc-audience: "https://api.cloudsmith.io/openid/mistral-ai"
+
+      # The plan, not a glob: it is the only thing that knows which descriptor variant is this
+      # index's. A second spelling of that path here would drift from pack-all.ts in silence, and
+      # the release would stay green while Cloudsmith served a stale descriptor.
+      #
+      # `--npm-dist-tag` comes from the plan too. Left unset, Cloudsmith assigns
+      # `latest` to the semantically highest version in the repository, so the
+      # first candidate for 0.1.3 would outrank the released 0.1.2 and become
+      # what every untagged customer install resolves to.
+      - name: Push npm packages
+        run: |
+          set -euo pipefail
+          bun scripts/release/publish-plan.ts cloudsmith | while IFS=$'\t' read -r tag tgz; do
+            cloudsmith push npm mistral-ai/sdk-distribution "$tgz" \
+              --npm-dist-tag "$tag" \
+              --tags "pkg-mistralai-capabilities"
+          done
+
+      - name: Push Python dists
+        run: |
+          set -euo pipefail
+          for dist in dist/py/*.whl dist/py/*.tar.gz; do
+            [ -e "$dist" ] || continue
+            cloudsmith push python mistral-ai/sdk-distribution "$dist" \
+              --tags "pkg-mistralai-capabilities"
+          done
+
+  # framework-check runs this on every PR, but against the merge result and against a set it builds
+  # itself. Neither is the thing that gets published. This job scans the `dist` artifact the publish
+  # jobs below download, so the bytes inspected are the bytes uploaded; rebuilding here would prove
+  # only that a second build of the same ref happens to be clean. It is the last gate before the
+  # first irreversible public upload.
+  public-artifacts:
+    name: Public artifact contents
+    needs: build
+    if: ${{ inputs.publish_public }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      # The scan reads the manifests that decide which artifacts are public, so it needs the source
+      # the artifact was built from: `inputs.ref`, the same ref `build` compiled. It holds no
+      # credential and no environment, which is what makes checking out that ref safe here.
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.0
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist
+
+      # build-python.ts creates `dist/py-public` even when no capability is public, so that an empty
+      # public set is stated rather than inferred. An artifact upload is a zip built from a file
+      # list, so that empty directory does not survive the round trip and the scan would read a
+      # deliberate empty set as a missing one. Recreating it restores what the build stated; an
+      # unexpectedly empty set is still caught, by the per-capability assertions in the scan itself.
+      - name: Restore the empty public Python set the artifact upload dropped
+        run: mkdir -p dist/py-public
+
+      - name: Inspect the artifacts that will be published
+        run: bun run public-artifacts:check --prebuilt
+
+  # A pending publisher does not create the project, so a correctly registered name still answers
+  # 404 until the first upload and existence cannot gate anything by itself. This job instead lists,
+  # unauthenticated, which projects pypi.org already holds and which the run would claim, so whoever
+  # approves the irreversible upload sees a name that is unexpectedly new or unexpectedly taken.
+  pypi-preflight:
+    name: Public PyPI project preflight
+    needs: build
+    if: ${{ inputs.publish_public }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ inputs.publisher_ref }}
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.0
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist
+
+      - name: Ask pypi.org which public projects it already holds
+        run: bun scripts/release/pypi-package-existence.ts
+
+  # First of the two public uploads, and the irreversible one. It runs before npm because a PyPI
+  # project name belongs to whoever uploads to it first, and `npmjs-bootstrap` makes a new
+  # capability's name public as soon as it publishes the skeleton.
+  #
+  # It waits on `npmjs-preflight` even though nothing here touches npm. That job fails when
+  # npmjs.org cannot say whether a package exists, and a release that cannot finish its npm leg
+  # should not spend the upload it can never take back. The preflight is unauthenticated and needs
+  # no approval, so the wait costs nothing.
+  publish-pypi:
+    name: Publish to PyPI
+    needs:
+      [
+        build,
+        public-artifacts,
+        publish-gemfury,
+        publish-cloudsmith,
+        pypi-preflight,
+        npmjs-preflight,
+      ]
+    if: >-
+      ${{ !cancelled() && inputs.publish_public &&
+          needs.public-artifacts.result == 'success' &&
+          (!inputs.publish_internal ||
+           (needs.publish-gemfury.result == 'success' &&
+            needs.publish-cloudsmith.result == 'success')) &&
+          needs.pypi-preflight.result == 'success' &&
+          needs.npmjs-preflight.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # PyPI trusted publishing
+    environment:
+      name: publish
+      url: https://pypi.org/
+    steps:
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.11.17"
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist
+
+      # `dist/py-public` is the canonical manifest-filtered subset produced by
+      # build-python.ts. Never publish the complete internal `dist/py` set here.
+      # An empty public set is expected until capabilities opt in; nullglob plus
+      # the explicit length check prevents a literal glob reaching uv.
+      - name: Publish public Python dists through OIDC
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          public_dists=(dist/py-public/*.whl dist/py-public/*.tar.gz)
+          if (( ${#public_dists[@]} == 0 )); then
+            echo "No public Python distributions to publish."
+            exit 0
+          fi
+          uv publish \
+            --publish-url https://upload.pypi.org/legacy/ \
+            --check-url https://pypi.org/simple/ \
+            --trusted-publishing always \
+            "${public_dists[@]}"
+
+  # npm attaches a trusted publisher to a package that already exists, and has no equivalent of
+  # PyPI's pending publishers, so a capability's first release has nothing to stage against. This
+  # asks the public registry which names are missing. It is unauthenticated, so it can say so before
+  # any credential is in play and before the staging job gets halfway through the plan.
+  npmjs-preflight:
+    name: Public npm package preflight
+    needs: build
+    if: ${{ inputs.publish_public }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      missing: ${{ steps.probe.outputs.missing }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ inputs.publisher_ref }}
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.0
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist
+
+      - name: Ask npmjs.org which public packages exist
+        id: probe
+        run: bun scripts/release/npm-package-existence.ts
+
+  # The one publish in this pipeline that is not OIDC, and the only job holding a credential that
+  # can reach the whole scope. It never downloads the `dist` artifact: the skeleton it publishes is
+  # written here, so no built PR code shares a runner with the session. It takes its own approval in
+  # the `publish` environment, because it waits at a different point in the run from the staging job.
+  #
+  # npm's web login prints a URL and polls for the answer rather than listening on a port, so the
+  # runner needs nothing open. Whoever holds the service-user passkey opens the URL from the job log
+  # and ticks npm's five-minute two-factor skip; `timeout-minutes` bounds how long the job waits.
+  npmjs-bootstrap:
+    name: Create missing npm packages
+    needs: [publish-pypi, npmjs-preflight]
+    # `publish-pypi` is the one gate worth naming. It succeeds only after the compliance scan and
+    # every selected internal destination did, so repeating those here would be three lists saying
+    # the same thing and no extra protection.
+    if: >-
+      ${{ inputs.publish_public &&
+          needs.publish-pypi.result == 'success' &&
+          needs.npmjs-preflight.outputs.missing != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    environment:
+      name: publish
+      url: https://www.npmjs.com/org/mistralai-capabilities
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ inputs.publisher_ref }}
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.0
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22.14.0
+
+      - name: Install npm with the trust command
+        run: |
+          set -euo pipefail
+          npm install --global npm@11.16.0
+          test "$(npm --version)" = "11.16.0"
+
+      # The session npm writes here can publish anything in the scope. Keeping it out of
+      # `~/.npmrc` is what lets the logout below be the whole of the cleanup.
+      - name: Reserve the throwaway npm config
+        run: |
+          NPM_USERCONFIG="$RUNNER_TEMP/npmrc-bootstrap"
+          install -m 600 /dev/null "$NPM_USERCONFIG"
+          echo "NPM_USERCONFIG=$NPM_USERCONFIG" >> "$GITHUB_ENV"
+
+      # One step, because npm's two-factor skip lasts five minutes and every publish and
+      # trust call has to land inside it.
+      - name: Create, deprecate and trust the skeletons
+        env:
+          NPM_TRUST_WORKFLOW: publish.yaml
+          NPM_TRUST_ENVIRONMENT: publish
+          MISSING: ${{ needs.npmjs-preflight.outputs.missing }}
+        run: |
+          set -euo pipefail
+          read -r -a packages <<< "$MISSING"
+          bun scripts/release/bootstrap-npm.ts "${packages[@]}"
+
+      # Revokes the session server-side, so a runner image left behind holds nothing. Runs on
+      # a timeout or a failed publish too, which are the cases where it matters.
+      - name: Log out and discard the npm config
+        if: always()
+        run: |
+          npm logout --userconfig "$NPM_USERCONFIG" --registry https://registry.npmjs.org/ || true
+          rm -f "$NPM_USERCONFIG"
+
+  publish-npmjs:
+    name: Stage on npmjs.org
+    needs: [build, publish-pypi, npmjs-preflight, npmjs-bootstrap]
+    # `npmjs-bootstrap` is skipped on every release that creates no package, which is almost all of
+    # them, so a skip is a pass here. A bootstrap that failed, timed out, or had its environment
+    # rejected is not, and stops the run before anything is staged.
+    #
+    # `!cancelled()` is what lets that skip through at all. Without a status-check function GitHub
+    # wraps the whole condition in `success()`, which a skipped dependency already fails, so this
+    # job would never run on the common path. The result checks below are the real gate, and
+    # `publish-pypi` carries the compliance scan and every selected internal destination with it.
+    if: >-
+      ${{ !cancelled() &&
+          inputs.publish_public &&
+          needs.publish-pypi.result == 'success' &&
+          needs.npmjs-preflight.result == 'success' &&
+          (needs.npmjs-bootstrap.result == 'success' ||
+           needs.npmjs-bootstrap.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing
+    environment:
+      name: publish
+      url: https://www.npmjs.com/org/mistralai-capabilities
+    steps:
+      # npm's OIDC trust policy binds the caller `.github/workflows/publish.yaml`
+      # and the `publish` environment: GitHub's `workflow_ref` identifies the caller,
+      # not this reusable workflow. The script itself comes from the explicit trusted ref.
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ inputs.publisher_ref }}
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.0
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          # npm staged publishing requires Node >=22.14.0 and npm >=11.15.0.
+          node-version: 22.14.0
+
+      # npm 11.16 provides the staged-publishing command used below:
+      # https://docs.npmjs.com/cli/v11/commands/npm-stage
+      - name: Install npm with staged publishing
+        run: |
+          set -euo pipefail
+          npm install --global npm@11.16.0
+          test "$(npm --version)" = "11.16.0"
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist
+
+      # Staging reserves each version but does not make it public. A maintainer
+      # must inspect and approve every stage with 2FA on npmjs.com (or reject it)
+      # before the package is installable. The trusted publisher must be configured
+      # stage-only: do not grant it permission to run direct `npm publish`.
+      #
+      # A retry cannot query `npm stage list` with its short-lived trusted-publisher
+      # token. The script attempts the complete public plan and skips only explicit
+      # already-staged/immutable-version errors, loudly warning that equality was
+      # not verified, so the maintainer approving the stage on npmjs.com has to
+      # check the artifact. `stage-npm.ts` consumes only the canonical,
+      # manifest-filtered public plan.
+      - name: Stage npm packages
+        run: bun scripts/release/stage-npm.ts
+
+  release:
+    name: GitHub release
+    needs: [build, publish-gemfury, publish-cloudsmith, publish-npmjs, publish-pypi]
+    # Only announce a non-cancelled release that completed every selected destination: both
+    # internal registries for an internal run, and npm staging for a public promotion.
+    # Successful npm staging already entails successful PyPI through its own
+    # `needs`/`if` gate.
+    if: >-
+      ${{ !cancelled() && inputs.github_release &&
+          (!inputs.publish_internal ||
+           (needs.publish-gemfury.result == 'success' &&
+            needs.publish-cloudsmith.result == 'success')) &&
+          (!inputs.publish_public || needs.publish-npmjs.result == 'success') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ inputs.publisher_ref }}
+          fetch-depth: 0
+
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          TAG="v${VERSION}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "mistralai-capabilities v${VERSION}"
+          else
+            gh release create "$TAG" --title "mistralai-capabilities v${VERSION}" --generate-notes
+          fi

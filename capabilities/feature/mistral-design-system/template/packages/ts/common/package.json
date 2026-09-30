@@ -1,0 +1,40 @@
+{
+  "name": "@mistral/common",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./*": {
+      "default": "./src/*.ts"
+    },
+    "./utils/patch": {
+      "default": "./src/utils/patch/index.ts"
+    },
+    "./utils/json-stream-parser": {
+      "default": "./src/utils/json-stream-parser/index.ts"
+    },
+    "./utils/bm25-search": {
+      "default": "./src/utils/bm25-search/index.ts"
+    },
+    "./utils/infer-json-schema": {
+      "default": "./src/utils/infer-json-schema/index.ts"
+    }
+  },
+  "license": "MIT",
+  "//scripts": "The upstream scripts (pnpm -w …, mtsc, vitest) belong to the monorepo this package was vendored out of and cannot run here; they are dropped so nx does not pick this workspace member up as a build/test target.",
+  "//dependencies": "Vendored out of the upstream monorepo: the upstream `catalog:` protocol is meaningless here, so every specifier is concrete. Versions match the root package.json catalog where it has an entry (zod), otherwise the upstream catalog entry this release resolved against. `ajv`, `ajv-formats` and `@standard-schema/spec` arrived with `src/utils/validate-json-schema.ts` in the 64.x sources and are still there in 86.1.0; nothing `@mistralai/ui` imports reaches that module, but the copy is a faithful mirror and a mirror that does not install is worse than an unused edge.",
+  "dependencies": {
+    "@standard-schema/spec": "1.1.0",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "fast-json-patch": "3.1.1",
+    "mutative": "1.3.0",
+    "remeda": "2.39.0",
+    "ts-pattern": "5.9.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@mistral/tsconfig": "workspace:*"
+  }
+}

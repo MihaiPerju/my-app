@@ -1,0 +1,24 @@
+[project]
+name = "mistralai-capabilities-deployment-apps"
+version = "0.1.0"
+description = "The Mistral Apps gateway seam: the caller token the gateway puts on each request, the middleware that catches it, and the host wiring that makes it the credential a caller's Mistral API calls spend."
+requires-python = ">=3.12,<3.15"
+license = "LicenseRef-Proprietary"
+dependencies = []
+
+# An optional extra rather than a base dependency: only the API host imports FastAPI. Keeping the
+# web framework out of the base distribution lets a consumer install the toolkit without loading it.
+# `starlette` is named separately because `middleware` imports it rather than FastAPI's re-exports.
+[project.optional-dependencies]
+fastapi = ["fastapi>=0.115", "starlette>=0.41"]
+
+[build-system]
+requires = ["uv_build>=0.8.22,<0.9.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+# The dist name is fixed by the CLI convention (= `<registry id>-<kind>-<capability id>`);
+# `module-name` decouples the IMPORT path from it. `namespace = true` makes this a PEP-420
+# portion so it ships only the `mistralai_capabilities.apps` slice alongside the sibling caps.
+module-name = "mistralai_capabilities.apps"
+namespace = true

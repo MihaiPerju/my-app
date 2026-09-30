@@ -1,0 +1,203 @@
+{{- if .Values.gateway.enabled }}
+{{- include "common.validateAuth" . }}
+{{- $apiEnabled := (.Values.api).enabled }}
+{{- $webEnabled := (.Values.web).enabled }}
+{{- $mcpEnabled := and $apiEnabled (default false (.Values.global.api).mcpAppsEnabled) }}
+{{- $apiUpstream := "" }}
+{{- if $apiEnabled }}{{- $apiUpstream = printf "%s:%v" (include "common.apiServiceName" .) .Values.api.service.port }}{{- end }}
+{{- $webUpstream := "" }}
+{{- if $webEnabled }}{{- $webUpstream = printf "%s:%v" (include "common.componentName" (dict "root" . "component" "web")) .Values.web.service.port }}{{- end }}
+{{- $discovery := printf "%s/.well-known/openid-configuration" (include "gateway.oidc.issuerUrl" .) }}
+{{- $introspection := printf "%s/protocol/openid-connect/token/introspect" (include "gateway.oidc.issuerUrl" .) }}
+{{- $clientId := include "gateway.oidc.clientId" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "common.componentName" (dict "root" . "component" "gateway") }}
+  labels:
+    {{- include "common.componentLabels" (dict "root" . "component" "gateway") | nindent 4 }}
+data:
+  config.yaml: |
+    apisix:
+      node_listen: {{ .Values.gateway.containerPort }}
+      enable_admin: false
+    deployment:
+      role: data_plane
+      role_data_plane:
+        config_provider: yaml
+  apisix.yaml: |
+    # Edge authentication. Keep in lockstep with deploy/docker/gateway/apisix.yaml, which carries
+    # the full rationale. The gateway is the only component that validates identity; the API trusts
+    # the x-user-id injected here. In a proxy-rewrite block, never name a header in both `remove`
+    # and `set` (3.17 runs add->set->remove, so remove wins), and never put X-Userinfo in `remove`.
+    # /api/health is the public debug endpoint. Do not add the kubelet probe paths: they probe the
+    # pod IP directly, and listing them would expose a per-replica drain signal at the edge.
+    routes:
+{{- if $apiEnabled }}
+      - uri: /api/health
+        priority: 20
+        upstream:
+          nodes:
+            {{ $apiUpstream | quote }}: 1
+          type: roundrobin
+        plugins:
+          proxy-rewrite:
+            headers:
+              remove: ["x-user-id", "x-user-email"]
+              set:
+                X-Forwarded-Host: "$host"
+                X-Forwarded-Proto: "$scheme"
+                X-Forwarded-For: "$remote_addr"
+
+      - uri: /api/*
+        priority: 10
+        upstream:
+          nodes:
+            {{ $apiUpstream | quote }}: 1
+          type: roundrobin
+        plugins:
+          openid-connect:
+            client_id: {{ $clientId | quote }}
+            client_secret: "$env://OIDC_CLIENT_SECRET"
+            discovery: {{ $discovery | quote }}
+            scope: {{ .Values.auth.oidc.scope | quote }}
+            # Validate a presented bearer by asking the IdP directly. Not use_jwks: that
+            # validates `iss` locally and Keycloak's issuer varies with the URL it was
+            # reached through. Not bearer_only either — with no bearer the plugin falls
+            # through to the session flow, so one route serves browser and API clients.
+            introspection_endpoint: {{ $introspection | quote }}
+            bearer_only: false
+            set_userinfo_header: true
+            set_access_token_header: false
+            access_token_in_authorization_header: false
+            set_id_token_header: false
+            unauth_action: deny
+            session:
+              secret: "$env://GATEWAY_SESSION_SECRET"
+          proxy-rewrite:
+            headers:
+              remove: ["x-user-id", "x-user-email"]
+              set:
+                X-Forwarded-Host: "$host"
+                X-Forwarded-Proto: "$scheme"
+                X-Forwarded-For: "$remote_addr"
+          serverless-pre-function:
+            phase: access
+            functions:
+              - |
+                return function(conf, ctx)
+                  local core = require("apisix.core")
+                  local raw = core.request.header(ctx, "X-Userinfo")
+                  if not raw then
+                    core.log.error("edge-auth: X-Userinfo absent; set_userinfo_header must be true")
+                    return 401, { detail = "Identity unavailable" }
+                  end
+                  local payload = ngx.decode_base64(raw)
+                  if not payload then
+                    core.log.error("edge-auth: X-Userinfo is not valid base64")
+                    return 401, { detail = "Identity unavailable" }
+                  end
+                  local claims, err = core.json.decode(payload)
+                  if not claims or not claims.sub then
+                    core.log.error("edge-auth: no sub claim: ", err or "nil")
+                    return 401, { detail = "Identity unavailable" }
+                  end
+                  core.request.set_header(ctx, "X-User-Id", claims.sub)
+                  core.request.set_header(ctx, "X-User-Email", claims.email)
+                  core.request.set_header(ctx, "X-Userinfo", nil)
+                  core.request.set_header(ctx, "X-ID-Token", nil)
+                  core.request.set_header(ctx, "X-Refresh-Token", nil)
+                  core.request.set_header(ctx, "Authorization", nil)
+                end
+
+{{- if $mcpEnabled }}
+      - uris:
+          - /mcp
+          - /mcp/*
+        upstream:
+          nodes:
+            {{ $apiUpstream | quote }}: 1
+          type: roundrobin
+        plugins:
+          openid-connect:
+            client_id: {{ $clientId | quote }}
+            client_secret: "$env://OIDC_CLIENT_SECRET"
+            discovery: {{ $discovery | quote }}
+            introspection_endpoint: {{ $introspection | quote }}
+            bearer_only: true
+            unauth_action: deny
+            set_userinfo_header: true
+            set_access_token_header: false
+            access_token_in_authorization_header: false
+            set_id_token_header: false
+            session:
+              secret: "$env://GATEWAY_SESSION_SECRET"
+          proxy-rewrite:
+            headers:
+              remove: ["x-user-id", "x-user-email"]
+              set:
+                X-Forwarded-Host: "$host"
+                X-Forwarded-Proto: "$scheme"
+                X-Forwarded-For: "$remote_addr"
+          serverless-pre-function:
+            phase: access
+            functions:
+              - |
+                return function(conf, ctx)
+                  local core = require("apisix.core")
+                  local raw = core.request.header(ctx, "X-Userinfo")
+                  if not raw then
+                    core.log.error("edge-auth: X-Userinfo absent; set_userinfo_header must be true")
+                    return 401, { detail = "Identity unavailable" }
+                  end
+                  local payload = ngx.decode_base64(raw)
+                  if not payload then
+                    core.log.error("edge-auth: X-Userinfo is not valid base64")
+                    return 401, { detail = "Identity unavailable" }
+                  end
+                  local claims, err = core.json.decode(payload)
+                  if not claims or not claims.sub then
+                    core.log.error("edge-auth: no sub claim: ", err or "nil")
+                    return 401, { detail = "Identity unavailable" }
+                  end
+                  core.request.set_header(ctx, "X-User-Id", claims.sub)
+                  core.request.set_header(ctx, "X-User-Email", claims.email)
+                  core.request.set_header(ctx, "X-Userinfo", nil)
+                  core.request.set_header(ctx, "X-ID-Token", nil)
+                  core.request.set_header(ctx, "X-Refresh-Token", nil)
+                  core.request.set_header(ctx, "Authorization", nil)
+                end
+{{- end }}
+{{- end }}
+
+{{- if $webEnabled }}
+      - uri: /*
+        priority: 1
+        upstream:
+          nodes:
+            {{ $webUpstream | quote }}: 1
+          type: roundrobin
+        plugins:
+          openid-connect:
+            client_id: {{ $clientId | quote }}
+            client_secret: "$env://OIDC_CLIENT_SECRET"
+            discovery: {{ $discovery | quote }}
+            scope: {{ .Values.auth.oidc.scope | quote }}
+            # The web app renders from its session cookie and reads no identity header,
+            # so this route authenticates and strips but does not inject. It still needs a
+            # bearer validator, or a token-carrying client only ever hits the session
+            # branch and is bounced to the login page.
+            introspection_endpoint: {{ $introspection | quote }}
+            bearer_only: false
+            set_userinfo_header: false
+            set_access_token_header: false
+            access_token_in_authorization_header: false
+            set_id_token_header: false
+            session:
+              secret: "$env://GATEWAY_SESSION_SECRET"
+          proxy-rewrite:
+            headers:
+              remove: ["x-user-id", "x-user-email"]
+{{- end }}
+    #END
+{{- end }}

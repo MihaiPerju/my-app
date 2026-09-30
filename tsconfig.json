@@ -1,0 +1,3 @@
+{
+  "extends": "@mistralai-capabilities/config/tsconfig.base.json"
+}

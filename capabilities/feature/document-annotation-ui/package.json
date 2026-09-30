@@ -1,0 +1,42 @@
+{
+  "name": "@mistralai-capabilities/feature-document-annotation-ui",
+  "version": "0.0.0",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "default": "./package/ts/src/index.ts"
+    },
+    "./web": {
+      "default": "./package/ts/src/web/index.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "test": "bun test package/ts"
+  },
+  "//dependencies": "The PDF viewer's packages, moved out of the templated apps/web manifest; the app links hoisted, so apps/web resolves them. Exact and together: `react-pdf` 10.4.1 depends on this `pdfjs-dist`, and the committed `apps/web/public/pdf.worker.min.mjs` must match it (see INSTALL.md).",
+  "devDependencies": {
+    "@mistralai-capabilities/config": "workspace:*",
+    "@types/bun": "^1.3.0",
+    "@types/react": "^19.2.17",
+    "typescript": "catalog:",
+    "@tanstack/react-query": "^5",
+    "react": "^19"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": "^5",
+    "react": "^19"
+  },
+  "peerDependenciesMeta": {
+    "@tanstack/react-query": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  }
+}

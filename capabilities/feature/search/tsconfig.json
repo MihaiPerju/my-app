@@ -1,0 +1,8 @@
+{
+  "extends": "@mistralai-capabilities/config/tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["bun"],
+    "noEmit": true
+  },
+  "include": ["package/ts/**/*.ts"]
+}

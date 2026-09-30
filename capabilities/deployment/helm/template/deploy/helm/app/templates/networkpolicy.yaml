@@ -1,0 +1,194 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $fullname := include "common.fullname" . }}
+{{- if .Values.networkPolicy.defaultDeny }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullname }}-default-deny
+  labels:
+    {{- include "common.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "common.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+{{- end }}
+{{- if .Values.networkPolicy.allowDNS }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullname }}-allow-dns
+  labels:
+    {{- include "common.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "common.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+{{- end }}
+{{- if (.Values.gateway).enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullname }}-gateway-ingress
+  labels:
+    {{- include "common.componentLabels" (dict "root" . "component" "gateway") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "common.componentSelectorLabels" (dict "root" . "component" "gateway") | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.gateway.containerPort }}
+{{- end }}
+{{- if (.Values.api).enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullname }}-api-ingress
+  labels:
+    {{- include "common.componentLabels" (dict "root" . "component" "api") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "common.componentSelectorLabels" (dict "root" . "component" "api") | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    {{- if (.Values.gateway).enabled }}
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "common.componentSelectorLabels" (dict "root" . "component" "gateway") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.api.containerPort }}
+    {{- else }}
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.api.containerPort }}
+    {{- end }}
+{{- end }}
+{{- if .Values.global.postgres.deploy }}
+---
+# Without this the in-cluster Postgres is unreachable: the default-deny policy selects every
+# pod in the release, and no other rule admits 5432. The allowed set is derived from
+# init.steps, so a step added there does not have to be remembered here.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullname }}-postgres-ingress
+  labels:
+    {{- include "common.componentLabels" (dict "root" . "component" "postgres") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "common.componentSelectorLabels" (dict "root" . "component" "postgres") | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "common.selectorLabels" . | nindent 14 }}
+            matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values:
+                  - api
+                  - workflows
+                  {{- range .Values.init.steps }}
+                  - init-{{ .name }}
+                  {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.global.postgres.service.port }}
+{{- end }}
+{{- if (.Values.web).enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullname }}-web-ingress
+  labels:
+    {{- include "common.componentLabels" (dict "root" . "component" "web") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "common.componentSelectorLabels" (dict "root" . "component" "web") | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    {{- if (.Values.gateway).enabled }}
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "common.componentSelectorLabels" (dict "root" . "component" "gateway") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.web.containerPort }}
+    {{- else }}
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.web.containerPort }}
+    {{- end }}
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullname }}-allow-egress
+  labels:
+    {{- include "common.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "common.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "common.selectorLabels" . | nindent 14 }}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 169.254.0.0/16
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 7233
+{{- if not .Values.global.postgres.deploy }}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: {{ .Values.global.postgres.port }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,12 @@
+# hadolint policy for `bunx nx run quality:lint-docker`. tools/quality.sh runs hadolint with the
+# workspace as its working directory, which is where hadolint looks for this file.
+#
+# Every entry is a rule the images deliberately do not follow. Fix a finding before you add to this
+# list, and give any addition its reason here.
+ignored:
+  # Pin versions in `apt-get install`. The Python images build FROM the floating `python:3.14-slim`
+  # tag, and Debian drops superseded package versions from its archive. An exact
+  # `build-essential=<version>` pin therefore breaks the build the next time the base image or the
+  # archive moves, without making it any more reproducible. Reproducibility comes from the pinned
+  # base image, uv, and bun toolchains instead (tests/registry pins those).
+  - DL3008

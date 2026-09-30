@@ -1,0 +1,22 @@
+{
+  "id": "docker-compose-workflows",
+  "version": "0.0.0",
+  "title": "Docker Compose — Workflows",
+  "description": "Docker Compose × Workflows integration. Owns the workflows service overlays (deploy/compose/compose.workflows.yaml and compose.workflows.dev.yaml) and their defaults environment (workflows.defaults.env) that the Compose roots include when the durable worker is deployed with Compose. Hidden: it activates automatically when both docker-compose and workflows are effective, and selecting it directly is shorthand for that pair. Template-only; delivered through the Git source.",
+  "kind": "deployment",
+  "visible": false,
+  "activatedWhen": {
+    "allOf": [
+      "docker-compose",
+      "workflows"
+    ]
+  },
+  "categories": [
+    "solutions"
+  ],
+  "packages": [],
+  "metadata": {
+    "weight": 43,
+    "public": false
+  }
+}

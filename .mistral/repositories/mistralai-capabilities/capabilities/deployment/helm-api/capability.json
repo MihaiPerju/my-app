@@ -1,0 +1,22 @@
+{
+  "id": "helm-api",
+  "version": "0.0.0",
+  "title": "Helm — API",
+  "description": "Helm × API integration. Owns the API subchart adapter at deploy/helm/app/charts/api. Hidden: it activates automatically when both helm and fastapi are effective, and selecting it directly is shorthand for that pair. Template-only; delivered through the Git source.",
+  "kind": "deployment",
+  "visible": false,
+  "activatedWhen": {
+    "allOf": [
+      "helm",
+      "fastapi"
+    ]
+  },
+  "categories": [
+    "solutions"
+  ],
+  "packages": [],
+  "metadata": {
+    "weight": 52,
+    "public": false
+  }
+}

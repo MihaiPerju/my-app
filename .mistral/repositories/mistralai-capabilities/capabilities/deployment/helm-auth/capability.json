@@ -1,0 +1,22 @@
+{
+  "id": "helm-auth",
+  "version": "0.0.0",
+  "title": "Helm — Auth",
+  "description": "Helm × Auth integration. Owns the umbrella chart's edge-authentication templates: the standalone APISIX gateway (deploy/helm/app/templates/gateway-deployment.yaml, gateway-service.yaml, gateway-configmap.yaml), the OIDC issuer/clientId helper (_gateway.tpl), the fail-closed auth preflight (_validate.tpl), and the edge Ingress (ingress.yaml). The umbrella's gateway/auth/ingress values and the OIDC secret keys render only when auth is effective, so a Helm selection without auth exposes no gateway, ingress, or OIDC material. Hidden: it activates automatically when both helm and auth are effective, and selecting it directly is shorthand for that pair. Template-only; delivered through the Git source.",
+  "kind": "deployment",
+  "visible": false,
+  "activatedWhen": {
+    "allOf": [
+      "helm",
+      "auth"
+    ]
+  },
+  "categories": [
+    "solutions"
+  ],
+  "packages": [],
+  "metadata": {
+    "weight": 53,
+    "public": false
+  }
+}

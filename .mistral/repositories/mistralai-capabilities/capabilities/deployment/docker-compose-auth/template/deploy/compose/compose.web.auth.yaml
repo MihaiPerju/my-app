@@ -1,0 +1,7 @@
+# Production browser traffic stays same-origin through APISIX. Vite consumes this build argument
+# while compiling the client bundle; a runtime environment variable would be too late.
+services:
+  web:
+    build:
+      args:
+        VITE_API_URL: ""

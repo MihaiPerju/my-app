@@ -1,0 +1,6 @@
+# Development browser traffic stays same-origin through APISIX so authenticated requests receive
+# the gateway-injected identity headers.
+services:
+  web:
+    environment:
+      VITE_API_URL: ""

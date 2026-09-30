@@ -1,0 +1,9 @@
+{
+  "name": "@app/chat",
+  "private": true,
+  "version": "0.0.1",
+  "//": "Dependency-only workspace member: it exists only when chat is selected, and pins the private `@mistral/workflow-ui` that chat's apps/web code imports, so apps/web/package.json stays plain JSON. The app links hoisted, so apps/web resolves it from the root node_modules. Its scope is mapped to the app's index only by mistral-design-system's .npmrc, which the CLI renders between its two installs, so this manifest is a .hbs (with no handlebars in it) to reach the app in the same phase: as a plain file the first install would fetch it from public npm and fail. The published chat package does not import it, so this is the one pin.",
+  "dependencies": {
+    "@mistral/workflow-ui": "0.1.1"
+  }
+}

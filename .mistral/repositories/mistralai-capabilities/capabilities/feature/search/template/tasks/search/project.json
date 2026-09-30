@@ -1,0 +1,14 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "search",
+  "projectType": "library",
+  "targets": {
+    "ingest": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "bash tools/uv.sh run --no-sync python -m cli ingest",
+        "cwd": "{workspaceRoot}"
+      }
+    }
+  }
+}

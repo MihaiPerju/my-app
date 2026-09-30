@@ -1,0 +1,52 @@
+[project]
+name = "mistralai-capabilities-database-bucket"
+version = "0.1.0"
+description = "Bucket capability: first-party object-storage backends — S3-compatible, GCS, Azure — behind one async Bucket interface."
+requires-python = ">=3.12,<3.15"
+license = "LicenseRef-Proprietary"
+dependencies = [
+    "structlog>=25,<26",
+    "typing-extensions>=4",
+    # S3 is base, not an extra: bucket *is* the S3-compatible object backend, and it is the only
+    # backend a generated app ever reaches for. GCS/Azure stay optional because they are heavy and
+    # nothing in this repo installs them.
+    #
+    # The aws lower bounds are floors, not preferences: the `search` capability still pulls
+    # `mistralai-search-toolkit-storage-s3==0.0.13`, which caps `aioboto3<14`, and the workspace
+    # resolves to one lockfile. Anything tighter makes the workspace unsatisfiable. Only the three
+    # names below are declared, because only they are imported: `aioboto3` and `botocore` by
+    # `s3.py`, and `types-aiobotocore-s3` at module scope there too — it is a RUNTIME
+    # import, not just a stub. `boto3` is NOT declared: nothing imports it, and `aioboto3` already
+    # pins it exactly through `aiobotocore[boto3]`.
+    "aioboto3>=13.0.0,<16.0.0",
+    "botocore>=1.36.0,<2.0.0",
+    "types-aiobotocore-s3>=2.21.1,<3.0.0",
+]
+
+# `azure-storage-blob` spans two minors on purpose. `mistralai-search-toolkit-storage-azure` pins a
+# single one (`12.28.x` at 0.0.10, `12.30.x` at 0.0.13) and the workspace resolves to one lockfile,
+# so a matching single-minor pin here would make every toolkit bump an unsatisfiable resolution
+# until this file moved in the same commit. The range is a ceiling to raise when the toolkit does,
+# not a version to track.
+[project.optional-dependencies]
+gcs = ["gcloud-aio-storage>=9.3.0,<10.0.0"]
+azure = ["azure-storage-blob[aio]>=12.28.0,<12.31.0", "azure-identity>=1.23.0,<2.0.0"]
+all = [
+    "gcloud-aio-storage>=9.3.0,<10.0.0",
+    "azure-storage-blob[aio]>=12.28.0,<12.31.0",
+    "azure-identity>=1.23.0,<2.0.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.8.22,<0.9.0"]
+build-backend = "uv_build"
+
+[tool.uv]
+exclude-newer = "7 days"
+
+[tool.uv.build-backend]
+# The dist name is fixed by the CLI convention (= `<registry id>-<kind>-<capability id>`);
+# `module-name` decouples the import path from it. `namespace = true` makes this a PEP-420
+# portion so it ships only the `mistralai_capabilities.bucket` slice alongside sibling caps.
+module-name = "mistralai_capabilities.bucket"
+namespace = true

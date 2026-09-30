@@ -1,0 +1,5 @@
+# Authenticated browser traffic reaches the API through the loopback-published APISIX gateway.
+services:
+  api:
+    environment:
+      CORS_ORIGIN: http://localhost:${GATEWAY_PORT:-9080}

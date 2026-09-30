@@ -1,0 +1,30 @@
+[project]
+name = "mistralai-capabilities-backend-fastapi"
+version = "0.1.0"
+description = "The HTTP delivery machinery apps/api is built on: the file-based router loader, the hook runtime other capabilities extend it through, SSE encoding, and the gen-openapi command."
+requires-python = ">=3.12,<3.15"
+license = "LicenseRef-Proprietary"
+dependencies = ["pydantic>=2"]
+
+# An optional extra rather than a base dependency: only the API host imports FastAPI. Keeping the
+# web framework out of the base distribution lets a worker install the toolkit without loading it.
+[project.optional-dependencies]
+# >=0.137.2: `routing` imports `fastapi.routing.iter_route_contexts`, added in that release.
+fastapi = ["fastapi>=0.137.2"]
+
+[build-system]
+requires = ["uv_build>=0.8.22,<0.9.0"]
+build-backend = "uv_build"
+
+# Installed with the capability, this becomes `uv run gen-openapi` in a generated app and backs the
+# `api:gen-openapi` NX target. It imports the app's `api.main` (present whenever this capability is
+# selected) and FastAPI from the API host environment, so no capability.json edge is implied.
+[project.scripts]
+gen-openapi = "mistralai_capabilities.fastapi.cli.gen_openapi:main"
+
+[tool.uv.build-backend]
+# The dist name is fixed by the CLI convention (= `<registry id>-<kind>-<capability id>`);
+# `module-name` decouples the IMPORT path from it. `namespace = true` makes this a PEP-420
+# portion so it ships only the `mistralai_capabilities.fastapi` slice alongside the sibling caps.
+module-name = "mistralai_capabilities.fastapi"
+namespace = true

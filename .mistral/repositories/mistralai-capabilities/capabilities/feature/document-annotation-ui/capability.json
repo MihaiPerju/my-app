@@ -1,0 +1,38 @@
+{
+  "id": "document-annotation-ui",
+  "version": "0.0.0",
+  "title": "Document Annotation UI",
+  "description": "Document Annotation UI: schema-driven document extraction \u2014 OCR, LLM extraction against a caller-supplied JSON schema, and a human-review pause \u2014 as workflow activities over object-storage document transport.",
+  "kind": "feature",
+  "categories": [
+    "solutions"
+  ],
+  "dependencies": [
+    "core",
+    "fastapi",
+    "tanstack-start",
+    "mistral-design-system",
+    "bucket",
+    "workflows",
+    "auth"
+  ],
+  "packages": [
+    "ts",
+    "py"
+  ],
+  "envVars": {
+    "MISTRAL_API_KEY": "",
+    "INGESTION_S3_REGION": "",
+    "INGESTION_S3_SESSION_TOKEN": "",
+    "DOCUMENT_ANNOTATION_UI_OCR_MODEL": "mistral-ocr-4-0",
+    "DOCUMENT_ANNOTATION_UI_EXTRACT_MODEL": "zai-glm-5-2",
+    "DOCUMENT_ANNOTATION_UI_EXTRACT_REASONING_EFFORT": "xhigh",
+    "DOCUMENT_ANNOTATION_UI_EXTRACT_TEMPERATURE": "0.0",
+    "DOCUMENT_ANNOTATION_UI_EXTRACT_TOP_P": "1.0",
+    "DOCUMENT_ANNOTATION_UI_EXTRACT_RANDOM_SEED": "42"
+  },
+  "metadata": {
+    "weight": 20,
+    "public": false
+  }
+}

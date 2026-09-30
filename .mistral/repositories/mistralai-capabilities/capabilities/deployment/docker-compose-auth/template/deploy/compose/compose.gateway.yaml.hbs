@@ -1,0 +1,97 @@
+x-infra-security: &infra-security
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  # Dev IdP. Production points the same OIDC plugin at a real Keycloak, so dev and
+  # prod share one auth code path — the API has no "dev mode" bypass.
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4
+    init: true
+    <<: *infra-security
+    # Keycloak splices a `${VAR}` placeholder into realm.json as raw text before it parses the JSON,
+    # so a client secret holding `"` or `\` would break the import. JSON-escape it into
+    # GATEWAY_OIDC_CLIENT_SECRET_JSON, the variable realm.json reads, then run Keycloak as usual.
+    # A control character has no business in a secret and is refused with a clear message.
+    entrypoint:
+      - bash
+      - -c
+      - |
+        secret="$${GATEWAY_OIDC_CLIENT_SECRET}"
+        if [[ "$$secret" == *[[:cntrl:]]* ]]; then
+          echo "GATEWAY_OIDC_CLIENT_SECRET contains a control character; use printable characters." >&2
+          exit 64
+        fi
+        secret="$${secret//\\/\\\\}"
+        secret="$${secret//\"/\\\"}"
+        export GATEWAY_OIDC_CLIENT_SECRET_JSON="$$secret"
+        exec /opt/keycloak/bin/kc.sh "$$@"
+      - kc.sh
+    command: ["start-dev", "--import-realm", "--http-port=8080"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_HEALTH_ENABLED: "true"
+      # Pin the frontend URL so the realm issuer is one string regardless of which host
+      # reached Keycloak. Without this, a token minted through localhost:8081 is `active: false`
+      # when the gateway introspects it through keycloak:8080, and every login fails with
+      # "invalid token". BACKCHANNEL_DYNAMIC keeps the gateway's in-network calls resolving to
+      # keycloak:8080 while the issuer stays external.
+      KC_HOSTNAME: http://localhost:${KEYCLOAK_PORT:-8081}
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      # Read by the realm import (`${GATEWAY_PORT:9080}` placeholders in realm.json), so the client's
+      # redirect URIs, web origins and post-logout URIs follow the published gateway port.
+      GATEWAY_PORT: ${GATEWAY_PORT:-9080}
+      # The `app` client's secret. The entrypoint above JSON-escapes it for the realm import
+      # (`${GATEWAY_OIDC_CLIENT_SECRET_JSON:…}` in realm.json). The gateway below authenticates with
+      # the same variable and default, so a customised secret in .env changes both sides.
+      GATEWAY_OIDC_CLIENT_SECRET: ${GATEWAY_OIDC_CLIENT_SECRET:-dev-client-secret}
+    volumes:
+      - ../docker/keycloak:/opt/keycloak/data/import:ro
+    ports:
+      - "${KEYCLOAK_PORT:-8081}:8080"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      # Realm import on a cold, loaded host has taken longer than the retry window alone. Failures
+      # inside start_period do not count, and the first passing probe still ends it early.
+      start_period: 300s
+    restart: unless-stopped
+
+  gateway:
+    image: apache/apisix:3.17.0-debian
+    init: true
+    <<: *infra-security
+    # GATEWAY_PORT moves the host side only; APISIX keeps listening on 9080 in the container.
+    # Keycloak's redirect URIs and the API's CORS origin follow the same variable.
+    ports:
+      - "${GATEWAY_PORT:-9080}:9080"
+    environment:
+      GATEWAY_OIDC_CLIENT_SECRET: ${GATEWAY_OIDC_CLIENT_SECRET:-dev-client-secret}
+      GATEWAY_SESSION_SECRET: ${GATEWAY_SESSION_SECRET:-dev-session-secret-change-me-32b}
+    volumes:
+      - ../docker/gateway/config.yaml:/usr/local/apisix/conf/config.yaml:ro
+      - ../docker/gateway/apisix.yaml:/usr/local/apisix/conf/apisix.yaml:ro
+    # `fastapi` and `web` are their own capabilities' overlays, so they exist here only when selected.
+    # compose rejects the entire project on a `depends_on` naming a service it cannot see --
+    # 'service "gateway" depends on undefined service "web": invalid compose project' -- so these
+    # two are gated exactly like their `include:` lines. `keycloak` is defined in this file.
+    depends_on:
+{{#if (has "fastapi")}}      api:
+        condition: service_healthy
+{{/if}}{{#if (has "tanstack-start")}}      web:
+        condition: service_healthy
+{{/if}}      keycloak:
+        condition: service_healthy
+    # The apache/apisix:*-debian image ships neither curl nor wget, so probe the
+    # listener with bash's /dev/tcp instead. Real routing is exercised by the
+    # smoke test's HTTP calls through the gateway.
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9080"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped

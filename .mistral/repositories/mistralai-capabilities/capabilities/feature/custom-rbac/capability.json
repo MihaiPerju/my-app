@@ -1,0 +1,32 @@
+{
+  "id": "custom-rbac",
+  "version": "0.0.0",
+  "title": "Custom RBAC (authorization)",
+  "description": "Role-based authorization for MistralApps: principals, teams and per-dimension read/write grants, with the admin matrix UI + API, page/data scoping, and the scoped-aggregate grounding rule. Identity/authn stays in `auth`; persistence uses `postgres`.",
+  "kind": "feature",
+  "default": false,
+  "categories": [
+    "solutions"
+  ],
+  "dependencies": [
+    "core",
+    "auth",
+    "fastapi",
+    "postgres",
+    "tanstack-start",
+    "mistral-design-system"
+  ],
+  "packages": [
+    "ts",
+    "py"
+  ],
+  "envVars": {
+    "CUSTOM_RBAC_POLICY": "pg",
+    "CUSTOM_RBAC_BOOTSTRAP_ADMINS": "",
+    "CUSTOM_RBAC_PAGES": ""
+  },
+  "metadata": {
+    "weight": 25,
+    "public": false
+  }
+}

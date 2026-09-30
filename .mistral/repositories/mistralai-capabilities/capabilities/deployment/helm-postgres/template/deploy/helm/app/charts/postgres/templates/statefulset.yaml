@@ -1,0 +1,110 @@
+{{- if and .Values.enabled .Values.global.postgres.deploy }}
+{{- $pg := .Values.global.postgres }}
+{{- $fullname := include "common.fullname" . }}
+{{- $pgName := include "common.postgresName" . }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $pgName }}
+  labels:
+    {{- include "common.componentLabels" (dict "root" . "component" "postgres") | nindent 4 }}
+spec:
+  serviceName: {{ $pgName }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "common.componentSelectorLabels" (dict "root" . "component" "postgres") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "common.componentSelectorLabels" (dict "root" . "component" "postgres") | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "common.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.global.serviceAccount.automountServiceAccountToken }}
+      {{- include "common.imagePullSecrets" (dict "root" .) | nindent 6 }}
+      securityContext:
+        {{- include "common.podSecurityContext" (dict "root" . "workload" .Values) | nindent 8 }}
+      containers:
+        - name: postgres
+          image: {{ printf "%s:%s" $pg.image.repository $pg.image.tag }}
+          imagePullPolicy: {{ $pg.image.pullPolicy }}
+          securityContext:
+            {{- include "common.containerSecurityContext" (dict "root" . "workload" .Values) | nindent 12 }}
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: {{ $pg.auth.username | quote }}
+            - name: POSTGRES_DB
+              value: {{ $pg.auth.database | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "common.secretName" . }}
+                  key: {{ $pg.auth.passwordSecretKey }}
+            # timescaledb-ha keeps its cluster under /home/postgres/pgdata, not the
+            # stock /var/lib/postgresql/data. The volume is mounted one level up so
+            # the entrypoint owns both `data` and the `backup` sibling it creates.
+            - name: PGDATA
+              value: /home/postgres/pgdata/data
+          resources:
+            {{- toYaml $pg.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /home/postgres/pgdata
+            - name: run
+              mountPath: /var/run/postgresql
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ $pg.auth.username | quote }}]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ $pg.auth.username | quote }}]
+            initialDelaySeconds: 20
+            periodSeconds: 15
+      volumes:
+        - name: run
+          emptyDir:
+            medium: Memory
+        - name: tmp
+          emptyDir:
+            medium: Memory
+        {{- if not $pg.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+        {{- end }}
+  {{- if $pg.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if $pg.persistence.storageClass }}
+        storageClassName: {{ $pg.persistence.storageClass | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ $pg.persistence.size }}
+  {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $pgName }}
+  labels:
+    {{- include "common.componentLabels" (dict "root" . "component" "postgres") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "common.componentSelectorLabels" (dict "root" . "component" "postgres") | nindent 4 }}
+  ports:
+    - name: postgres
+      port: {{ $pg.service.port }}
+      targetPort: postgres
+      protocol: TCP
+{{- end }}

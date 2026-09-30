@@ -1,0 +1,89 @@
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.24.2
+    hooks:
+      - id: gitleaks
+        stages: [pre-commit, manual]
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+        args:
+          - --maxkb=51200
+      - id: check-case-conflict
+      # tsconfig files are JSONC (TypeScript reads them with comments and trailing commas), which a
+      # strict JSON parser rejects.
+      - id: check-json
+        exclude: '(^|/)tsconfig[^/]*\.json$'
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: trailing-whitespace
+        args:
+          - --markdown-linebreak-ext=md
+      - id: check-yaml
+        args:
+          - --allow-multiple-documents
+        exclude: '(^|.*/)(templates/.*\.ya?ml|mkdocs\.ya?ml)$|^deploy/compose/|(^|/)(docker-)?compose[^/]*\.ya?ml$'
+      # Compose files may use Compose's own merge tags (`ports: !override`, `!reset`), which the
+      # safe loader above rejects ("could not determine a constructor for the tag"). `--unsafe`
+      # still parses them, so a syntax error fails here, but does not construct the tags.
+      - id: check-yaml
+        name: check yaml (compose files, syntax only)
+        args:
+          - --allow-multiple-documents
+          - --unsafe
+        files: '^deploy/compose/.*\.ya?ml$|(^|/)(docker-)?compose[^/]*\.ya?ml$'
+      - id: detect-private-key
+
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.9.1
+    hooks:
+      - id: nbstripout
+        args: [--verify]
+
+  - repo: local
+    hooks:
+      - id: block-env-files
+        name: Block environment files
+        language: fail
+        entry: Environment files must not be committed. Use .env.example[.*], .env.sample[.*], .env.template[.*], or .env.dist[.*] for documentation.
+        files: '(^|/)\.env($|\.(?!(example|sample|template|dist)($|\.)))'
+
+      - id: block-local-credential-configs
+        name: Block local credential configs
+        language: fail
+        entry: Local credential and tool auth configs must not be committed.
+        files: '(^|/)(\.envrc|\.aws/credentials|\.docker/config\.json|\.dockercfg|\.kube/config|\.netrc|\.pgpass|\.pypirc|id_dsa|id_ecdsa|id_ed25519|id_rsa)$'
+
+      - id: block-terraform-working-directories
+        name: Block Terraform working directories
+        language: fail
+        entry: Terraform working directories must not be committed.
+        files: '(^|/)\.terraform/'
+
+      - id: block-notebook-checkpoints
+        name: Block notebook checkpoints
+        language: fail
+        entry: Notebook checkpoints must not be committed.
+        files: '(^|/)\.ipynb_checkpoints/'
+
+      - id: block-sensitive-extensions
+        name: Block sensitive file extensions
+        language: fail
+        entry: Sensitive files, logs, local databases, and Terraform state must not be committed.
+        files: '(\.(bak|backup|bson|cer|crt|csr|db|db-shm|db-wal|der|dump|har|jks|kdbx|key|keystore|log|mdb|mobileconfig|ovpn|p8|p12|pfx|pcap|pem|ppk|rdb|sqlite|sqlite-shm|sqlite-wal|sqlite3|sqlite3-shm|sqlite3-wal|tfplan|tfstate))$'
+
+      - id: block-credential-json
+        name: Block credential-like JSON files
+        language: fail
+        entry: Credential-like JSON files must not be committed.
+        files: '(^|/).*?(client-secret|client_secret|credentials|secrets|service-account|service_account).*\.json$'
+
+
+      - id: block-data-exports
+        name: Block data and office exports
+        language: fail
+        entry: Data exports, office documents, and archives are blocked by the Solutions security policy.
+        files: '(\.tar\.gz|\.(7z|avro|csv|doc|docm|docx|gz|jsonl|ndjson|numbers|pages|parquet|pdf|ppt|pptm|pptx|rar|tar|tgz|tsv|xls|xlsm|xlsx|zip))$'
+

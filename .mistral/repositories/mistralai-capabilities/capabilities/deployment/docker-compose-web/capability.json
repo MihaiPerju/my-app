@@ -1,0 +1,25 @@
+{
+  "id": "docker-compose-web",
+  "version": "0.0.0",
+  "title": "Docker Compose — Web",
+  "description": "Docker Compose × Web integration. Owns the web service overlays (deploy/compose/compose.web.yaml and compose.web.dev.yaml) that the Compose roots include when the web frontend is deployed with Compose. Hidden: it activates automatically when both docker-compose and tanstack-start are effective, and selecting it directly is shorthand for that pair. Template-only; delivered through the Git source.",
+  "kind": "deployment",
+  "visible": false,
+  "activatedWhen": {
+    "allOf": [
+      "docker-compose",
+      "tanstack-start"
+    ]
+  },
+  "categories": [
+    "solutions"
+  ],
+  "packages": [],
+  "envVars": {
+    "WEB_PORT": "3001"
+  },
+  "metadata": {
+    "weight": 42,
+    "public": false
+  }
+}

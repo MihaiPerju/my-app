@@ -1,0 +1,27 @@
+{
+  "id": "auth",
+  "version": "0.0.0",
+  "title": "Authentication",
+  "description": "The authentication domain: gateway-fronted edge auth backed by Keycloak, with the caller resolved from the gateway's assertion and persisted in Postgres. Selecting it pulls Postgres for the user store and declares the gateway/Keycloak deployment secrets. Combined with FastAPI it activates the hidden fastapi-auth integration (the identity gate and Postgres user store); combined with a deployment capability it activates that deployment's hidden auth overlay (the gateway and Keycloak).",
+  "kind": "feature",
+  "default": true,
+  "categories": [
+    "solutions"
+  ],
+  "dependencies": [
+    "core",
+    "postgres"
+  ],
+  "packages": [],
+  "envVars": {
+    "GATEWAY_OIDC_CLIENT_SECRET": "dev-client-secret",
+    "GATEWAY_SESSION_SECRET": "dev-session-secret-change-me-32b",
+    "KEYCLOAK_ADMIN": "admin",
+    "KEYCLOAK_ADMIN_PASSWORD": "admin",
+    "KEYCLOAK_PORT": "8081"
+  },
+  "metadata": {
+    "weight": 18,
+    "public": false
+  }
+}

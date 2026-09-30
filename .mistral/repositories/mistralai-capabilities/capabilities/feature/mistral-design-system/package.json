@@ -1,0 +1,41 @@
+{
+  "name": "@mistralai-capabilities/feature-mistral-design-system",
+  "version": "0.0.0",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./package/ts/index.ts",
+    "./components": {
+      "default": "./package/ts/components/src/index.ts"
+    },
+    "./lib": {
+      "default": "./package/ts/lib/src/index.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit"
+  },
+  "//dependencies": "Public packages the design system's apps/web code imports, moved out of the templated apps/web manifest. The CLI installs this package at the app root and the app links hoisted, so they resolve from apps/web. Ranges match the app catalog in core's package.json so bun keeps one copy. `@mistralai/ui` stays an optional peer: the template's dependency-only `packages/ts/mistral-design-system` member pins it.",
+  "devDependencies": {
+    "@mistralai-capabilities/config": "workspace:*",
+    "@types/bun": "^1.3.0",
+    "@types/react": "^19.2.17",
+    "typescript": "catalog:",
+    "react": "^19"
+  },
+  "peerDependencies": {
+    "@mistralai/ui": "86.1.0",
+    "react": "^19"
+  },
+  "peerDependenciesMeta": {
+    "@mistralai/ui": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  }
+}

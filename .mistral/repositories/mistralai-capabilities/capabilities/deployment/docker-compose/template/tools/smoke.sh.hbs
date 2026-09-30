@@ -1,0 +1,643 @@
+#!/usr/bin/env bash
+# =============================================================================
+# tools/smoke.sh — End-to-end smoke test for app.
+#
+# Brings up the Docker Compose stack (init is owned by docker-compose; the gateway is owned by the
+# hidden docker-compose-auth integration and present only when auth is effective; postgres, api, web
+# and workflows are present only when their capability is installed; MCP is mounted into api at /mcp)
+# and verifies the system end-to-end with a PASS / FAIL / SKIP verdict per check. Workflows run on
+# Mistral-hosted infrastructure, not self-hosted Temporal.
+#
+# Every check that targets an optional module is gated on that module being installed, so a slimmer
+# capability selection degrades gracefully instead of emitting FAIL rows.
+#
+# QUICK START (operator):
+#   export MISTRAL_REGISTRY_TOKEN="$(grep -hE '^(MISTRAL_REGISTRY_TOKEN|GEMFURY_PULL_TOKEN)=' \
+#     /path/.env.registry /path/.env.gemfury 2>/dev/null | head -1 | cut -d= -f2)"
+#   export MISTRAL_API_KEY="sk-..."   # optional; live steps SKIP if absent
+#   bash tools/smoke.sh
+#
+# Steps that need a live Mistral key are SKIPPED, not falsely reported as PASS, when
+# MISTRAL_API_KEY is absent. Credential-free proofs (the worker discovers >0 workflows; the MCP
+# app-tool surface is empty) run via one-off containers.
+#
+# Exit code: 0 if every non-skipped check PASSED, non-zero otherwise.
+# =============================================================================
+
+set -euo pipefail
+
+# -----------------------------------------------------------------------------
+# Configuration (all overridable via environment)
+# -----------------------------------------------------------------------------
+# Repo root = parent of this script's dir. Compose must run from repo root.
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." >/dev/null 2>&1 && pwd -P)"
+cd "${REPO_ROOT}"
+
+# The stack publishes the ports the root .env sets (Compose reads it through --env-file below), so
+# the probes must use the same values. Ask Compose rather than parse .env here: `compose.sh env`
+# prints Compose's own interpolation environment, with the shell over the file and the file read
+# by Compose's rules, so `API_PORT="13000" # moved` is 13000 here exactly as it is to Compose.
+# Without a docker CLI this is empty and the preflight below reports why.
+COMPOSE_ENV="$(bash "${SCRIPT_DIR}/compose.sh" env 2>/dev/null || true)"
+
+# compose_value <NAME> -> NAME's value as Compose interpolates it, empty when unset.
+compose_value() {
+  printf '%s\n' "${COMPOSE_ENV}" | sed -n "s/^$1=//p" | tail -n 1
+}
+
+# Host ports the compose stack publishes: the shell wins, then the root .env, then the default.
+# Override, e.g. API_PORT=13000, when a dev process already holds 3000 or any other default port.
+API_PORT="${API_PORT:-$(compose_value API_PORT)}"; API_PORT="${API_PORT:-3000}"
+WEB_PORT="${WEB_PORT:-$(compose_value WEB_PORT)}"; WEB_PORT="${WEB_PORT:-3001}"
+GATEWAY_PORT="${GATEWAY_PORT:-$(compose_value GATEWAY_PORT)}"; GATEWAY_PORT="${GATEWAY_PORT:-9080}"
+POSTGRES_PORT="${POSTGRES_PORT:-$(compose_value POSTGRES_PORT)}"; POSTGRES_PORT="${POSTGRES_PORT:-5432}"
+
+{{#if (has "auth")}}# Dev IdP credentials. The gateway runs OIDC against the Keycloak in compose; the
+# smoke test mints a token with the password grant rather than driving a browser.
+KEYCLOAK_PORT="${KEYCLOAK_PORT:-$(compose_value KEYCLOAK_PORT)}"; KEYCLOAK_PORT="${KEYCLOAK_PORT:-8081}"
+# The realm deploy/docker/keycloak/realm.json imports, named after the app at generation time.
+APP_REALM="{{projectName}}"
+OIDC_REALM="${OIDC_REALM:-${APP_REALM}}"
+OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-app}"
+# The secret Compose hands to both the gateway and Keycloak's realm import, so a customised
+# GATEWAY_OIDC_CLIENT_SECRET in .env mints tokens here too.
+OIDC_CLIENT_SECRET="${GATEWAY_OIDC_CLIENT_SECRET:-$(compose_value GATEWAY_OIDC_CLIENT_SECRET)}"
+OIDC_CLIENT_SECRET="${OIDC_CLIENT_SECRET:-dev-client-secret}"
+OIDC_USER="${OIDC_USER:-dev}"
+OIDC_PASS="${OIDC_PASS:-dev}"
+ACCESS_TOKEN=""
+
+{{/if}}# Timeouts / polling (seconds).
+HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-300}"   # per-service wait for healthy/reachable
+HEALTH_INTERVAL="${HEALTH_INTERVAL:-5}"   # poll interval
+BUILD_TIMEOUT="${BUILD_TIMEOUT:-1800}"    # docker compose build ceiling (informational)
+PROOF_TIMEOUT="${PROOF_TIMEOUT:-180}"     # per credential-free proof container
+
+# Behaviour toggles.
+KEEP_UP="${KEEP_UP:-0}"                    # 1 = do NOT tear down on exit
+SKIP_BUILD="${SKIP_BUILD:-0}"              # 1 = reuse existing images (skip build)
+USE_PLAYWRIGHT="${USE_PLAYWRIGHT:-auto}"   # auto|1|0 — assert shell render if available
+
+# Private package registry pull token — needed only for the image build (BuildKit secret).
+# Accept the new name first, then fall back to GEMFURY_PULL_TOKEN so an app generated before the
+# rename (its gitignored .env still carries the old name) keeps building. Exported so the compose
+# `registry_token` secret, which reads MISTRAL_REGISTRY_TOKEN from the environment, sees it.
+export MISTRAL_REGISTRY_TOKEN="${MISTRAL_REGISTRY_TOKEN:-${GEMFURY_PULL_TOKEN:-}}"
+
+# The number of discovered workflows depends on which feature capabilities are installed (speech,
+# search, evals, agents, the feedback loop), so the smoke asserts ">0 discovered", not a fixed
+# count that a selection would drift from. EXPECT_MCP_TOOLS stays 0: the MCP server carries MCP
+# Apps only and no feature declares one yet, so the app tool surface is empty.
+EXPECT_MCP_TOOLS="${EXPECT_MCP_TOOLS:-0}"
+
+# Export the per-index Python registry username before Compose expands its build arguments.
+. "${SCRIPT_DIR}/uv.sh"
+
+# Compose command + a unique-but-stable project name so re-runs are idempotent
+# and teardown scoped. Override COMPOSE_PROJECT to isolate parallel runs. The root .env is passed
+# explicitly because Compose's project directory (deploy/compose) would never find it.
+COMPOSE_PROJECT="${COMPOSE_PROJECT:-scapp-smoke}"
+DC=(docker compose -p "${COMPOSE_PROJECT}")
+[[ -f .env ]] && DC+=(--env-file .env)
+DC+=(-f deploy/compose/compose.yaml)
+
+# -----------------------------------------------------------------------------
+# Output helpers (colored, TTY-aware)
+# -----------------------------------------------------------------------------
+if [[ -t 1 ]]; then
+  C_RESET=$'\033[0m'; C_GREEN=$'\033[32m'; C_RED=$'\033[31m'
+  C_YELLOW=$'\033[33m'; C_BLUE=$'\033[34m'; C_BOLD=$'\033[1m'
+else
+  C_RESET=''; C_GREEN=''; C_RED=''; C_YELLOW=''; C_BLUE=''; C_BOLD=''
+fi
+
+log()   { printf '%s[smoke]%s %s\n' "${C_BLUE}" "${C_RESET}" "$*"; }
+warn()  { printf '%s[smoke]%s %s\n' "${C_YELLOW}" "${C_RESET}" "$*" >&2; }
+err()   { printf '%s[smoke]%s %s\n' "${C_RED}" "${C_RESET}" "$*" >&2; }
+hr()    { printf '%s\n' "----------------------------------------------------------------------"; }
+
+# Ordered result registry: parallel arrays of name / status / detail.
+RESULT_NAMES=(); RESULT_STATUS=(); RESULT_DETAIL=()
+
+record() {
+  # record <name> <PASS|FAIL|SKIP> <detail...>
+  local name="$1" status="$2"; shift 2
+  local detail="$*"
+  RESULT_NAMES+=("${name}")
+  RESULT_STATUS+=("${status}")
+  RESULT_DETAIL+=("${detail}")
+  case "${status}" in
+    PASS) printf '  %s[PASS]%s %-34s %s\n' "${C_GREEN}" "${C_RESET}" "${name}" "${detail}" ;;
+    FAIL) printf '  %s[FAIL]%s %-34s %s\n' "${C_RED}"   "${C_RESET}" "${name}" "${detail}" ;;
+    SKIP) printf '  %s[SKIP]%s %-34s %s\n' "${C_YELLOW}" "${C_RESET}" "${name}" "${detail}" ;;
+    *)    printf '  [%s] %-34s %s\n' "${status}" "${name}" "${detail}" ;;
+  esac
+}
+
+pass() { record "$1" PASS "${2:-}"; }
+fail() { record "$1" FAIL "${2:-}"; }
+skip() { record "$1" SKIP "${2:-}"; }
+
+# -----------------------------------------------------------------------------
+# Teardown trap
+# -----------------------------------------------------------------------------
+teardown() {
+  local ec=$?
+  if [[ "${KEEP_UP}" == "1" ]]; then
+    warn "KEEP_UP=1 — leaving the stack running. Tear down later with:"
+    warn "  ${DC[*]} down -v"
+  else
+    log "Tearing down stack (docker compose down -v)…"
+    "${DC[@]}" down -v --remove-orphans >/dev/null 2>&1 || \
+      warn "teardown encountered errors (ignored)"
+  fi
+  return "${ec}"
+}
+trap teardown EXIT
+
+# -----------------------------------------------------------------------------
+# Small utilities
+# -----------------------------------------------------------------------------
+have() { command -v "$1" >/dev/null 2>&1; }
+
+# port_in_use <port> -> 0 if something is LISTENing on the host port
+port_in_use() {
+  local p="$1"
+  if have lsof; then
+    lsof -nP -iTCP:"${p}" -sTCP:LISTEN >/dev/null 2>&1
+  elif have nc; then
+    nc -z 127.0.0.1 "${p}" >/dev/null 2>&1
+  else
+    # Fallback: bash /dev/tcp probe (best-effort).
+    (exec 3<>"/dev/tcp/127.0.0.1/${p}") >/dev/null 2>&1 && { exec 3>&- 3<&-; return 0; } || return 1
+  fi
+}
+
+# http_code <url> -> prints numeric HTTP status (000 on connection failure)
+http_code() {
+  curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$1" 2>/dev/null || echo "000"
+}
+
+{{#if (has "auth")}}# mint_token -> fetch an access token from the dev Keycloak (direct access grant)
+mint_token() {
+  curl -s --max-time 15 \
+    -d "grant_type=password" \
+    -d "client_id=${OIDC_CLIENT_ID}" \
+    -d "client_secret=${OIDC_CLIENT_SECRET}" \
+    -d "username=${OIDC_USER}" \
+    -d "password=${OIDC_PASS}" \
+    "http://localhost:${KEYCLOAK_PORT}/realms/${OIDC_REALM}/protocol/openid-connect/token" \
+    2>/dev/null | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p'
+}
+
+# gcode <url> -> HTTP status through the gateway, carrying a real bearer token
+gcode() {
+  [[ -n "${ACCESS_TOKEN}" ]] || ACCESS_TOKEN="$(mint_token)"
+  curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" "$1" 2>/dev/null || echo "000"
+}
+
+# ucode <url> -> HTTP status through the gateway with NO credentials
+ucode() {
+  curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$1" 2>/dev/null || echo "000"
+}
+
+{{/if}}# wait_http <name> <url> <expected_code> — poll until code matches or timeout
+wait_http() {
+  local name="$1" url="$2" expect="${3:-200}"
+  local deadline=$(( SECONDS + HEALTH_TIMEOUT )) code
+  while (( SECONDS < deadline )); do
+    code="$(http_code "${url}")"
+    if [[ "${code}" == "${expect}" ]]; then
+      pass "${name}" "HTTP ${code} @ ${url}"
+      return 0
+    fi
+    sleep "${HEALTH_INTERVAL}"
+  done
+  fail "${name}" "did not return ${expect} within ${HEALTH_TIMEOUT}s (last=${code:-000} @ ${url})"
+  return 1
+}
+
+# compose_ps_field <service> <field1> <field2> — prints "field1:field2" for the first container
+# whose Name contains <service>, read from `docker compose ps --format json`. Parse JSON with
+# python3, not `--format '<go template>'`, because a Go template string cannot survive a
+# Handlebars-rendered (.hbs) file. `--format json` emits one JSON object per line or a single JSON
+# array depending on the compose version, so both shapes are handled.
+compose_ps_field() {
+  local svc="$1" f1="$2" f2="$3"
+  "${DC[@]}" ps -a --format json 2>/dev/null | python3 -c '
+import sys, json
+svc, f1, f2 = sys.argv[1], sys.argv[2], sys.argv[3]
+data = sys.stdin.read().strip()
+rows = []
+if data:
+    try:
+        obj = json.loads(data)
+        rows = obj if isinstance(obj, list) else [obj]
+    except ValueError:
+        for line in data.splitlines():
+            line = line.strip()
+            if line:
+                try:
+                    rows.append(json.loads(line))
+                except ValueError:
+                    pass
+for o in rows:
+    if svc in o.get("Name", ""):
+        print(str(o.get(f1, "")) + ":" + str(o.get(f2, "")))
+        break
+' "${svc}" "${f1}" "${f2}"
+}
+
+# wait_compose_healthy <service> — poll `docker compose ps` health status
+wait_compose_healthy() {
+  local svc="$1"
+  local deadline=$(( SECONDS + HEALTH_TIMEOUT )) health
+  while (( SECONDS < deadline )); do
+    health="$(compose_ps_field "${svc}" Health State)"
+    case "${health}" in
+      healthy:*)  pass "health:${svc}" "container healthy"; return 0 ;;
+      *:exited)   fail "health:${svc}" "container exited unexpectedly"; return 1 ;;
+    esac
+    sleep "${HEALTH_INTERVAL}"
+  done
+  fail "health:${svc}" "not healthy within ${HEALTH_TIMEOUT}s (last='${health:-unknown}')"
+  return 1
+}
+
+# wait_compose_completed <service> — for one-shot jobs (init): exit 0
+wait_compose_completed() {
+  local svc="$1"
+  local deadline=$(( SECONDS + HEALTH_TIMEOUT )) rc
+  while (( SECONDS < deadline )); do
+    rc="$(compose_ps_field "${svc}" State ExitCode)"
+    case "${rc}" in
+      exited:0) pass "init:completed" "exit 0"; return 0 ;;
+      exited:*) fail "init:completed" "exit ${rc#exited:}"; return 1 ;;
+    esac
+    sleep "${HEALTH_INTERVAL}"
+  done
+  fail "init:completed" "did not complete within ${HEALTH_TIMEOUT}s (last='${rc:-running}')"
+  return 1
+}
+
+# with_timeout <seconds> <cmd...> — run a command under a wall-clock limit.
+# Uses GNU `timeout` (Linux/CI) or `gtimeout` (coreutils); if neither exists
+# (e.g. a stock macOS dev box) it runs the command without a limit so the smoke
+# still works locally.
+with_timeout() {
+  local secs="$1"; shift
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "${secs}" "$@"
+  elif command -v gtimeout >/dev/null 2>&1; then
+    gtimeout "${secs}" "$@"
+  else
+    "$@"
+  fi
+}
+
+# capture_proof <service> <appdir> <python-snippet> — run a credential-free discovery snippet in a
+# one-off container (--no-deps: do not start dependencies just to import and count) and print its
+# trimmed stdout, empty on failure. This is the capture pipeline shared by run_proof (== expected)
+# and the workflows ">0" check.
+capture_proof() {
+  local svc="$1" appdir="$2" snippet="$3" out rc
+  # The snippet prints a single integer to stdout; structlog noise -> stderr,
+  # discarded with 2>/dev/null inside the container.
+  out="$(with_timeout "${PROOF_TIMEOUT}" "${DC[@]}" run --rm --no-deps -T "${svc}" \
+    sh -c "uv run --frozen --no-dev --no-sync --directory ${appdir} python -c \"${snippet}\" 2>/dev/null" \
+    2>/dev/null | tr -d '[:space:]')" && rc=0 || rc=$?
+  [[ "${rc}" -eq 0 ]] || out=""
+  printf '%s' "${out}"
+}
+
+# run_proof <name> <service> <appdir> <python-snippet> <expected-int>
+# Asserts the captured stdout equals <expected-int>.
+run_proof() {
+  local name="$1" svc="$2" appdir="$3" snippet="$4" expect="$5"
+  local out
+  out="$(capture_proof "${svc}" "${appdir}" "${snippet}")"
+  if [[ "${out}" == "${expect}" ]]; then
+    pass "${name}" "count=${out} (expected ${expect})"
+    return 0
+  fi
+  fail "${name}" "count=${out:-<empty>} (expected ${expect})"
+  return 1
+}
+
+# run_proof_python — like run_proof, but runs `python -c <snippet>` directly in
+# the service container (no `uv run --directory`). Used for images that are NOT
+# the uv-workspace layout, e.g. the standalone agent (its own venv is on PATH
+# with PYTHONPATH=/app/src).
+run_proof_python() {
+  local name="$1" svc="$2" snippet="$3" expect="$4"
+  local out rc
+  out="$(with_timeout "${PROOF_TIMEOUT}" "${DC[@]}" run --rm --no-deps -T "${svc}" \
+    python -c "${snippet}" 2>/dev/null | tr -d '[:space:]')" && rc=0 || rc=$?
+  if [[ "${rc}" -ne 0 ]]; then
+    fail "${name}" "proof container failed (rc=${rc})"
+    return 1
+  fi
+  if [[ "${out}" == "${expect}" ]]; then
+    pass "${name}" "count=${out} (expected ${expect})"
+    return 0
+  fi
+  fail "${name}" "count=${out:-<empty>} (expected ${expect})"
+  return 1
+}
+
+# =============================================================================
+# STEP 0 — Preflight
+# =============================================================================
+step_preflight() {
+  hr; log "${C_BOLD}Preflight${C_RESET}"; hr
+
+  # docker + compose present
+  if have docker && docker compose version >/dev/null 2>&1; then
+    pass "preflight:docker" "$(docker --version 2>/dev/null | head -1)"
+  else
+    fail "preflight:docker" "docker + 'docker compose' plugin are required"
+    return 1
+  fi
+
+  # docker daemon reachable
+  if docker info >/dev/null 2>&1; then
+    pass "preflight:daemon" "docker daemon reachable"
+  else
+    fail "preflight:daemon" "docker daemon not reachable (is Docker running?)"
+    return 1
+  fi
+
+  # python3 is required: every health poll parses `docker compose ps --format json`
+  # with it (compose_ps_field). Without it, each wait would silently time out with a
+  # misleading "not healthy" instead of a clear error here.
+  if have python3; then
+    pass "preflight:python3" "$(python3 --version 2>/dev/null | head -1)"
+  else
+    fail "preflight:python3" "python3 is required (health checks parse compose JSON with it)"
+    return 1
+  fi
+
+  # compose file valid (parses + resolves)
+  if "${DC[@]}" config >/dev/null 2>&1; then
+    pass "preflight:compose-config" "docker compose config valid"
+  else
+    fail "preflight:compose-config" "docker compose config failed to parse"
+    "${DC[@]}" config 2>&1 | tail -5 >&2 || true
+    return 1
+  fi
+
+  # MISTRAL_REGISTRY_TOKEN required for BUILD (BuildKit secret; resolved above with a fallback to
+  # the old GEMFURY_PULL_TOKEN). If reusing images (SKIP_BUILD=1) it is not needed.
+  if [[ -n "${MISTRAL_REGISTRY_TOKEN:-}" ]]; then
+    pass "preflight:registry-token" "MISTRAL_REGISTRY_TOKEN present"
+  elif [[ "${SKIP_BUILD}" == "1" ]]; then
+    skip "preflight:registry-token" "SKIP_BUILD=1 — build skipped, token not needed"
+  else
+    fail "preflight:registry-token" \
+      "MISTRAL_REGISTRY_TOKEN not set — required for 'docker compose build'. Export it or set SKIP_BUILD=1."
+    return 1
+  fi
+
+  # MISTRAL_API_KEY optional — governs the live workflow step only.
+  if [[ -n "${MISTRAL_API_KEY:-}" ]]; then
+    pass "preflight:mistral-key" "MISTRAL_API_KEY present — live steps enabled"
+  else
+    skip "preflight:mistral-key" "MISTRAL_API_KEY absent — live workflow steps will be SKIPPED"
+  fi
+
+  # Host port availability (only the ports we probe from the host).
+  local p name any_busy=0
+  for pair in "API:${API_PORT}" "WEB:${WEB_PORT}" {{#if (has "auth")}}"GATEWAY:${GATEWAY_PORT}"{{/if}}; do
+    name="${pair%%:*}"; p="${pair##*:}"
+    if port_in_use "${p}"; then
+      any_busy=1
+      warn "host port ${p} (${name}) is already in use"
+    fi
+  done
+  if [[ "${any_busy}" == "0" ]]; then
+    pass "preflight:ports" "API=${API_PORT} WEB=${WEB_PORT} {{#if (has "auth")}}GATEWAY=${GATEWAY_PORT} {{/if}}free"
+  else
+    fail "preflight:ports" \
+      "one or more host ports busy — override with API_PORT/WEB_PORT/GATEWAY_PORT env vars"
+    return 1
+  fi
+}
+
+# =============================================================================
+# STEP 1 — Build & up
+# =============================================================================
+step_build_up() {
+  hr; log "${C_BOLD}Build & start stack${C_RESET}"; hr
+
+  if [[ "${SKIP_BUILD}" == "1" ]]; then
+    skip "build" "SKIP_BUILD=1 — reusing existing images"
+  else
+    log "docker compose build (BuildKit secret registry_token <- \$MISTRAL_REGISTRY_TOKEN)…"
+    if DOCKER_BUILDKIT=1 "${DC[@]}" build; then
+      pass "build" "images built with registry secret"
+    else
+      fail "build" "docker compose build failed"
+      return 1
+    fi
+  fi
+
+  log "docker compose up -d…"
+  if "${DC[@]}" up -d; then
+    pass "up" "stack started (detached)"
+  else
+    fail "up" "docker compose up -d failed"
+    "${DC[@]}" ps || true
+    return 1
+  fi
+}
+
+# =============================================================================
+# STEP 2 — Service health
+# =============================================================================
+step_health() {
+  hr; log "${C_BOLD}Service health${C_RESET}"; hr
+
+  # Infra + app containers with compose healthchecks. Each app service is contributed by
+  # its own capability, so its health wait is gated on that capability being installed;
+  # init is always present; the gateway health wait is gated on docker-compose-auth (auth effective).
+{{#if (has "postgres")}}  wait_compose_healthy postgres      || true
+{{/if}}{{#if (has "fastapi")}}  wait_compose_healthy api           || true
+{{/if}}{{#if (has "tanstack-start")}}  wait_compose_healthy web           || true
+{{/if}}{{#if (has "auth")}}  wait_compose_healthy gateway       || true
+{{/if}}{{#if (has "workflows")}}  wait_compose_healthy workflows     || true
+{{/if}}  # MCP is mounted into the api app (/mcp); it has no separate container.
+  # The agent's durable worker requires live credentials, so credential-free
+  # smoke coverage uses one-off project-loading and API-transport proofs below.
+
+  wait_compose_completed init        || true
+}
+
+# =============================================================================
+# STEP 3 — HTTP endpoints (host-published ports)
+# =============================================================================
+step_http() {
+  hr; log "${C_BOLD}HTTP endpoints${C_RESET}"; hr
+
+{{#if (has "fastapi")}}  local hbody hcode
+  hcode="$(http_code "http://localhost:${API_PORT}/api/health")"
+  if [[ "${hcode}" == "200" ]]; then
+    hbody="$(curl -s --max-time 10 "http://localhost:${API_PORT}/api/health" 2>/dev/null || echo '')"
+    if printf '%s' "${hbody}" | grep -q '"status"[[:space:]]*:[[:space:]]*"ok"'; then
+      pass "api:/api/health" "200 + status:ok JSON"
+    else
+      fail "api:/api/health" "200 but body missing status:ok (${hbody:0:80})"
+    fi
+  else
+    fail "api:/api/health" "expected 200, got ${hcode}"
+  fi
+
+{{/if}}{{#if (has "tanstack-start")}}{{#if (has "chat")}}  wait_http "web:/chat" "http://localhost:${WEB_PORT}/chat" 200 || true
+{{/if}}{{/if}}{{#if (has "auth")}}{{#if (has "fastapi")}}  wait_http "gateway:/api/health" "http://localhost:${GATEWAY_PORT}/api/health" 200 || true
+{{/if}}{{/if}}
+}
+
+# =============================================================================
+# STEP 4 — Credential-free discovery proofs
+# =============================================================================
+step_proofs() {
+  hr; log "${C_BOLD}Credential-free discovery proofs${C_RESET}"; hr
+
+{{#if (has "workflows")}}  # Assert the worker discovers at least one workflow. The exact number depends on which
+  # feature capabilities are installed, so ">0" is the selection-independent invariant.
+  local wf_count
+  wf_count="$(capture_proof workflows apps/worker \
+    "from mistralai.workflows import discover_all_workflows_in_package; print(len(discover_all_workflows_in_package('worker.workflows')))")"
+  if [[ "${wf_count}" =~ ^[1-9][0-9]*$ ]]; then
+    pass "workflows:discover-count" "discovered ${wf_count} workflow(s) (>0)"
+  else
+    fail "workflows:discover-count" "expected >0 workflows, got ${wf_count:-<empty>}"
+  fi
+
+{{/if}}{{#if (has "mcp-apps")}}  # The MCP server is MCP Apps only — the HTTP API is deliberately not mirrored into tools —
+  # and today the generated API host passes an explicit empty MCP App catalog.
+  run_proof "mcp:app-tools" api apps/api \
+    "import asyncio; from api.main import create_app; a=create_app(); m=next(r.app for r in a.routes if getattr(r,'path',None)=='/mcp').state.fastmcp_server; print(len(asyncio.run(m.list_tools())))" \
+    "${EXPECT_MCP_TOOLS}" || true
+{{/if}}
+}
+
+# =============================================================================
+# STEP 6 — Web shell + feature routes + chat (served via gateway /*)
+# =============================================================================
+step_web_routes() {
+  hr; log "${C_BOLD}Web shell + feature routes${C_RESET}"; hr
+
+  # The gateway serves the web SPA at /* — feature routes return the 200 HTML
+  # shell (SPA). The home page was removed, so / redirects to /chat.
+  local base="http://localhost:${GATEWAY_PORT}"
+{{#if (has "chat")}}  local root_code
+  root_code="$(gcode "${base}/")"
+  if [[ "${root_code}" == "307" || "${root_code}" == "308" || "${root_code}" == "302" ]]; then
+    pass "web/" "HTTP ${root_code} (redirects to /chat)"
+  else
+    fail "web/" "expected redirect to /chat, got ${root_code}"
+  fi
+
+{{/if}}  # Feature routes are contributed by their own capabilities, so each is listed only
+  # when installed. The array may be empty (neither feature selected); guard the loop.
+  local routes=( {{#if (has "chat")}}"/chat" {{/if}})
+  local r code
+  if (( ${#routes[@]} > 0 )); then
+    for r in "${routes[@]}"; do
+      code="$(gcode "${base}${r}")"
+      if [[ "${code}" == "200" ]]; then
+        pass "web${r}" "HTTP 200"
+      else
+        fail "web${r}" "expected 200, got ${code}"
+      fi
+    done
+  fi
+
+  # Optional: assert the shell actually renders via Playwright, if available and
+  # creds allow. HTTP-200 above is the baseline; this is a stronger render check.
+  local want_pw=0
+  case "${USE_PLAYWRIGHT}" in
+    1) want_pw=1 ;;
+    auto) have npx && [[ -n "${MISTRAL_API_KEY:-}" ]] && want_pw=1 ;;
+    *) want_pw=0 ;;
+  esac
+  if [[ "${want_pw}" == "1" ]] && npx --no-install playwright --version >/dev/null 2>&1; then
+    # Unauthenticated: the gateway must bounce the browser to the IdP login. That
+    # redirect working IS the check — a rendered app shell here would mean the
+    # edge let an anonymous browser through.
+    local pw_url="http://localhost:${GATEWAY_PORT}/"
+    if npx --no-install playwright screenshot --wait-for-timeout=2000 \
+        "${pw_url}" /tmp/scapp-smoke-shell.png >/dev/null 2>&1; then
+      pass "web:playwright-render" "browser reached the edge (screenshot captured)"
+    else
+      fail "web:playwright-render" "playwright failed to reach the edge"
+    fi
+  else
+    skip "web:playwright-render" "playwright unavailable or disabled — HTTP-only checks used"
+  fi
+}
+
+# =============================================================================
+# Summary + exit code
+# =============================================================================
+print_summary() {
+  hr; printf '%s%sSMOKE SUMMARY%s\n' "${C_BOLD}" "${C_BLUE}" "${C_RESET}"; hr
+  local i n_pass=0 n_fail=0 n_skip=0
+  printf '  %-4s %-34s %s\n' "RES" "CHECK" "DETAIL"
+  for i in "${!RESULT_NAMES[@]}"; do
+    local st="${RESULT_STATUS[$i]}" color=""
+    case "${st}" in
+      # NB: assignment form (not ((x++))) — post-increment returns the old value,
+      # which is 0 on the first bump and trips `set -e` under strict bash (CI).
+      PASS) color="${C_GREEN}"; n_pass=$(( n_pass + 1 )) ;;
+      FAIL) color="${C_RED}";   n_fail=$(( n_fail + 1 )) ;;
+      SKIP) color="${C_YELLOW}"; n_skip=$(( n_skip + 1 )) ;;
+    esac
+    printf '  %s%-4s%s %-34s %s\n' \
+      "${color}" "${st}" "${C_RESET}" "${RESULT_NAMES[$i]}" "${RESULT_DETAIL[$i]}"
+  done
+  hr
+  printf '  %sPASS=%d%s  %sFAIL=%d%s  %sSKIP=%d%s  (total %d)\n' \
+    "${C_GREEN}" "${n_pass}" "${C_RESET}" \
+    "${C_RED}"   "${n_fail}" "${C_RESET}" \
+    "${C_YELLOW}" "${n_skip}" "${C_RESET}" \
+    "$(( n_pass + n_fail + n_skip ))"
+  hr
+
+  if (( n_fail > 0 )); then
+    err "SMOKE FAILED — ${n_fail} check(s) failed."
+    return 1
+  fi
+  if (( n_skip > 0 )); then
+    warn "SMOKE PASSED with ${n_skip} skipped check(s) (see SKIP rows; likely missing creds)."
+  else
+    log "${C_GREEN}SMOKE PASSED — all checks green.${C_RESET}"
+  fi
+  return 0
+}
+
+# =============================================================================
+# Main
+# =============================================================================
+main() {
+  log "Project=${COMPOSE_PROJECT}  Ports: API=${API_PORT} WEB=${WEB_PORT}{{#if (has "auth")}} GATEWAY=${GATEWAY_PORT}{{/if}}"
+
+  # A failing preflight or build/up is fatal (abort early) — but still print the
+  # summary and tear down via the trap.
+  step_preflight   || { print_summary || true; exit 1; }
+  step_build_up    || { print_summary || true; exit 1; }
+
+  # Non-fatal steps: run everything, collect results, decide at the end. Each
+  # step records PASS/FAIL/SKIP; the '|| true' keeps set -e from aborting so we
+  # always reach the summary.
+  step_health           || true
+  step_http             || true
+  step_proofs           || true
+{{#if (has "tanstack-start")}}{{#if (has "auth")}}  step_web_routes       || true
+{{/if}}{{/if}}
+  print_summary
+}
+
+main "$@"

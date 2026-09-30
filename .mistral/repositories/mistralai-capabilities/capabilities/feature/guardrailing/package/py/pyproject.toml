@@ -1,0 +1,33 @@
+[project]
+name = "mistralai-capabilities-feature-guardrailing"
+version = "0.1.0"
+description = "Guardrailing capability: fail-closed prompt and response classification with a pgvector similarity scanner."
+requires-python = ">=3.12,<3.15"
+license = "LicenseRef-Proprietary"
+dependencies = [
+    "mistralai>=2.9.4",
+    "mistralai-workflows>=3.10.0",
+    # NOT declared: `mistralai-guardrails[pgvector]`, which `guardrail.py` and `seed.py` import. The
+    # SDK is private, and no index binding can travel with this toolkit: a `--source git` app vendors
+    # this pyproject (and the registry root's) as a path dependency, so any index URL here pins the
+    # app to one private host whichever channel it installs from, and a published wheel carries no
+    # binding at all, so uv would look the SDK up on public PyPI. The app declares it instead, on the
+    # dependency-only `packages/py/guardrailing` workspace member this capability's template ships,
+    # whose own `[tool.uv.sources]` binds it to the app's private index.
+    "diskcache>=5.6,<6",
+    "pydantic>=2",
+]
+
+
+[build-system]
+requires = ["uv_build>=0.8.22,<0.9.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+# The dist name is fixed by the CLI convention (= `<registry id>-<kind>-<capability id>`);
+# `module-name` keeps the IMPORT path unchanged so no vendored app file has to
+# be edited.
+# `namespace = true` makes this a PEP-420 portion so the sibling capability
+# dists can each ship their own slice of `mistralai_capabilities`.
+module-name = "mistralai_capabilities.guardrails"
+namespace = true

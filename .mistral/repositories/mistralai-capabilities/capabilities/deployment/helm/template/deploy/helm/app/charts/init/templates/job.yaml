@@ -1,0 +1,10 @@
+{{- if .Values.enabled }}
+{{- range .Values.steps }}
+{{- if ne .enabled false }}
+{{- $command := list "sh" "-c" (printf "exec uv run --frozen --no-dev --no-sync python -m cli %s" .name) -}}
+{{- $workload := mergeOverwrite (deepCopy $.Values) (omit . "name") (dict "command" $command) -}}
+---
+{{ include "common.job" (dict "root" $ "component" (printf "init-%s" .name) "workload" $workload) }}
+{{ end }}
+{{- end }}
+{{- end }}

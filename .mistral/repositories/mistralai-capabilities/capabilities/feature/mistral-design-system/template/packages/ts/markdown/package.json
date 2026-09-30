@@ -1,0 +1,37 @@
+{
+  "name": "@mistral/markdown",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    },
+    "./react": {
+      "default": "./src/react.ts"
+    },
+    "./url": {
+      "default": "./src/url.ts"
+    },
+    "./transforms": {
+      "default": "./src/transforms.ts"
+    }
+  },
+  "license": "MIT",
+  "//scripts": "The upstream scripts (pnpm -w …, mtsc, tsx, vitest) belong to the monorepo this package was vendored out of and cannot run here; they are dropped so nx does not pick this workspace member up as a build/test target.",
+  "//dependencies": "Vendored out of the upstream monorepo: the upstream `catalog:`/`workspace:*` protocols are meaningless here, so every specifier is concrete. src/ imports exactly two bare specifiers: `mdast` (types only, provided by @types/mdast — a dependency, not a devDependency, because this package ships raw .ts source) and `react` (optional peer, used only by src/react.ts).",
+  "dependencies": {
+    "@types/mdast": "^4.0.4"
+  },
+  "peerDependencies": {
+    "react": "^19.2.7"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@mistral/tsconfig": "workspace:*"
+  }
+}

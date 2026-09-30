@@ -1,0 +1,14 @@
+[
+  {
+    "query": "annual capital overview summary",
+    "relevant_reference_ids": ["page_number_12"]
+  },
+  {
+    "query": "net capital requirement",
+    "relevant_reference_ids": ["page_number_12"]
+  },
+  {
+    "query": "institution history background commentary",
+    "relevant_reference_ids": ["page_number_2"]
+  }
+]

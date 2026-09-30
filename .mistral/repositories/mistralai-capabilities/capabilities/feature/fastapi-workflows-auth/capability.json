@@ -1,0 +1,29 @@
+{
+  "id": "fastapi-workflows-auth",
+  "version": "0.0.0",
+  "title": "FastAPI — Workflows Auth",
+  "description": "FastAPI × workflows authenticated execution integration. Owns the WorkflowRouter HTTP surface, the execution command/ownership/schema layer and its Postgres store, and workflow encryption setup. Hidden: it activates when FastAPI, auth and workflows are effective; its Postgres dependency supplies durable ownership and idempotency. The workflows capability independently supplies the API's workflows-app workspace edge.",
+  "kind": "feature",
+  "visible": false,
+  "activatedWhen": {
+    "allOf": [
+      "fastapi",
+      "auth",
+      "workflows"
+    ]
+  },
+  "dependencies": [
+    "postgres"
+  ],
+  "categories": [
+    "solutions"
+  ],
+  "packages": [
+    "ts",
+    "py"
+  ],
+  "metadata": {
+    "weight": 2,
+    "public": false
+  }
+}

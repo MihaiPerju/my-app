@@ -1,0 +1,18 @@
+# Default reviewer for everything (overridden by the more specific rules below).
+* @mistralai/applied-ai-hexagon @mistralai/engineering-apps
+
+# Capability owners
+/capabilities/feature/document-annotation-ui/ @alodieboissonnet
+/capabilities/feature/search/ @mistralai/engineering-context
+/capabilities/backend/workflows/ @mistralai/engineering-workflows
+/capabilities/feature/custom-rbac/ @mistralai/applied-for-mistral
+
+# Publication infrastructure (explicit last-match rules).
+/scripts/compliance/ @mistralai/engineering-apps
+/tests/registry/compliance/ @mistralai/engineering-apps
+/scripts/release/ @mistralai/engineering-apps
+/scripts/registry/ @mistralai/engineering-apps
+/.github/workflows/framework-check.yaml @mistralai/engineering-apps
+/.github/workflows/publish.yaml @mistralai/engineering-apps
+/.github/workflows/publish-core.yaml @mistralai/engineering-apps
+/.github/workflows/publish-rc.yaml @mistralai/engineering-apps

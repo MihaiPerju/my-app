@@ -1,0 +1,28 @@
+{
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "name": "evals",
+  "projectType": "library",
+  "targets": {
+    "eval-agents": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "bash tools/uv.sh run --no-sync python -m cli eval-agents",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "eval-search": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "bash tools/uv.sh run --no-sync python -m cli eval-search",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "eval-search-corpus": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "bash tools/uv.sh run --no-sync python -m cli eval-search-corpus",
+        "cwd": "{workspaceRoot}"
+      }
+    }
+  }
+}

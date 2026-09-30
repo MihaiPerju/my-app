@@ -1,0 +1,93 @@
+---
+name: Python Bandit
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "**.py"
+
+jobs:
+  filter-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      run_ci: ${{ steps.filter.outputs.run_ci }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          # Include the PR merge commit's target-branch parent for exact local filtering.
+          fetch-depth: 2
+      - id: filter
+        uses: arcanis/paths-filter@f93359cf7153aea180e36f4c180aaf3e3fae44cc # master
+        with:
+          token: ''
+          filters: |
+            run_ci:
+              - "**.py"
+  analyze:
+    needs: filter-changes
+    if: needs.filter-changes.outputs.run_ci == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write # To comment on the PR
+      id-token: write
+    steps:
+    - name: Set up Python 3.14
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      with:
+        python-version: 3.14
+
+    - name: Checkout repository
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+    - name: Install Bandit
+      shell: bash
+      run: pip install bandit
+
+    - name: Run Bandit
+      shell: bash
+      run: |
+        bandit --severity-level high --confidence-level medium --recursive --format txt --output bandit-report.txt --exit-zero ./
+
+    - name: Create String Output
+      shell: bash
+      id: bandit-report-string
+      run: |
+        BANDIT_REPORT=$(cat bandit-report.txt)
+
+        delimiter="$(openssl rand -hex 8)"
+        {
+          echo "summary<<${delimiter}"
+          echo "## Bandit Static Code Analyzer Report"
+          echo "<details><summary>Click to expand</summary>"
+          echo ""
+          echo '```python'
+          echo "$BANDIT_REPORT"
+          echo '```'
+          echo "</details>"
+          echo "${delimiter}"
+        }  >> "$GITHUB_OUTPUT"
+
+    - name: Push Bandit Report to PR
+      if: github.ref != 'refs/heads/main'
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      env:
+        SUMMARY: "${{ steps.bandit-report-string.outputs.summary }}"
+      with:
+        github-token: ${{ github.token }}
+        script: |
+          const body = `${process.env.SUMMARY}`;
+
+          const pr = context.issue.number
+          if (pr == null) {
+            return
+          }
+
+          github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+          })

@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/part-of: mistralai-capabilities-k3d
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: keycloak
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+    spec:
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:26.4
+          imagePullPolicy: IfNotPresent
+          args: ["start-dev", "--import-realm", "--http-port=8080"]
+          env:
+            - name: KC_BOOTSTRAP_ADMIN_USERNAME
+              value: "admin"
+            - name: KC_BOOTSTRAP_ADMIN_PASSWORD
+              value: "admin"
+            - name: KC_HEALTH_ENABLED
+              value: "true"
+            # These two make login work; copied from deploy/compose/compose.gateway.yaml.
+            # KC_HOSTNAME pins the issuer to the browser URL, so `iss` is one fixed string.
+            # Without it, a token minted through localhost:8081 introspects as active:false
+            # when the gateway asks via keycloak:8080, and login fails with "invalid token".
+            # BACKCHANNEL_DYNAMIC still lets the gateway call in-cluster.
+            - name: KC_HOSTNAME
+              value: "http://localhost:8082"
+            - name: KC_HOSTNAME_BACKCHANNEL_DYNAMIC
+              value: "true"
+          ports:
+            - name: http
+              containerPort: 8080
+          volumeMounts:
+            - name: realm
+              mountPath: /opt/keycloak/data/import
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /realms/mistralai-capabilities
+              port: 8080
+            periodSeconds: 5
+            failureThreshold: 60
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 1Gi
+      volumes:
+        - name: realm
+          configMap:
+            name: keycloak-realm
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+spec:
+  # NodePort, not ClusterIP: the browser has to reach Keycloak directly for the
+  # authorization redirect, and k3d's loadbalancer maps host 8082 to node 31082.
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: keycloak
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      nodePort: 31082
+---
+# The chart's egress policy excludes RFC1918, correct for a public IdP but wrong for this
+# one at 10.42.x.x:8080. Only the gateway talks to Keycloak, so this opens egress for that
+# component alone, and only towards this pod.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gateway-to-keycloak
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: gateway
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: keycloak
+      ports:
+        - protocol: TCP
+          port: 8080

@@ -1,0 +1,52 @@
+{
+  "name": "mistralai-capabilities",
+  "private": true,
+  "workspaces": {
+    "packages": [
+      "apps/*",
+      "packages/*",
+      "capabilities/*/*",
+      "tests/*"
+    ],
+    "catalog": {
+      "typescript": "^5",
+      "@types/node": "^22",
+      "zod": "^4.1.13",
+      "i18next": "^25.6.0",
+      "react-i18next": "^16.0.0"
+    }
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "check-types": "turbo check-types",
+    "test": "turbo test",
+    "test:registry": "bun test tests/registry",
+    "e2e": "python3 scripts/e2e/generate_app.py",
+    "lint:templates": "python3 scripts/e2e/lint_templates.py",
+    "fmt:templates": "python3 scripts/e2e/fmt_templates.py",
+    "registry:build": "bun scripts/registry/build-registry.ts && bun scripts/registry/app-registry-pins.ts",
+    "registry:publication-check": "bun scripts/registry/publication-check.ts",
+    "registry:check": "bun scripts/registry/publication-check.ts && bun scripts/registry/build-registry.ts --check && bun scripts/registry/app-registry-pins.ts --check",
+    "docs:build": "bun scripts/registry/build-docs.ts",
+    "docs:check": "bun scripts/registry/build-docs.ts --check",
+    "public-artifacts:check": "bun scripts/compliance/check-public-artifacts.ts",
+    "lint": "oxlint scripts packages tests",
+    "lint:fix": "oxlint --fix scripts packages tests",
+    "format": "oxfmt --write scripts packages tests *.json *.md",
+    "format:check": "oxfmt --check scripts packages tests *.json *.md"
+  },
+  "devDependencies": {
+    "@mistralai-capabilities/config": "workspace:*",
+    "@oxlint/plugins": "1.83.0",
+    "@shadcn/lint": "0.1.0",
+    "@types/node": "catalog:",
+    "oxfmt": "^0.55.0",
+    "oxlint": "1.83.0",
+    "turbo": "^2.6.3",
+    "typescript": "catalog:",
+    "zod": "^4.1.13"
+  },
+  "packageManager": "bun@1.4.0"
+}

@@ -1,0 +1,385 @@
+# Default values for the {{projectName}} umbrella chart.
+# This chart is HARDENED BY DEFAULT: every workload runs non-root (uid/gid 1000),
+# with a read-only root filesystem, all Linux capabilities dropped, seccomp
+# RuntimeDefault, and explicit CPU/memory requests+limits.
+#
+# No real secrets live in this file. Secret material comes from an in-chart Secret populated
+# by CI (see `secrets.*`) or an ExternalSecret (see `secrets.externalSecrets`). Templates
+# reference secret keys through `secretKeyRef` only, never inline plaintext.
+#
+# STRUCTURE:
+#   global.*  — shared config Helm merges into every subchart; consumed by the
+#               common.* library helpers (image, security, secrets, postgres, ingress, ports).
+#   <service> — per-subchart override block (api/web/agent/workflows/init/postgres).
+#   parent-owned resources (ingress, networkPolicy, secrets.data, serviceAccount,
+#               imageCredentials) are rendered by the umbrella templates/.
+
+# =============================================================================
+# GLOBAL — shared config merged into every subchart (.Values.global.*)
+# =============================================================================
+global:
+  # This app's name, stamped in when the app was scaffolded. Everything that has to
+  # name the product derives from it -- the chart's base name, the default ingress
+  # host -- so there is one place to change it rather than a literal per chart.
+  appName: "{{projectName}}"
+
+  nameOverride: ""
+  fullnameOverride: ""
+
+  # Base domain used to derive default ingress hostnames (<host>.<baseDomain>).
+  baseDomain: "example.com"
+
+  # Identifies this deployment's workflow worker to the Mistral-hosted scheduler.
+  # Defaults to the release name. Two deployments that share it will contend for the
+  # same work, so environments must not reuse one.
+  deploymentName: ""
+
+{{#if (has "observability")}}  observability:
+    # Full OTLP/HTTP traces endpoint used by SDK-owned providers in API and init workloads.
+    # Workflow workers derive their telemetry endpoint from SERVER_URL instead.
+    mistralOtlpTracesEndpoint: "https://api.mistral.ai/telemetry/v1/traces"
+
+{{/if}}{{#if (has "custom-rbac")}}  customRbac:
+    # Comma-separated emails. The one source for both consumers: the init-custom-rbac Job seeds them as
+    # admins, and the API protects them from demotion/deletion. Set per environment; empty means no
+    # admin exists and the admin API is unreachable.
+    bootstrapAdmins: ""
+
+{{/if}}
+  # Common labels/annotations merged onto every rendered object.
+  commonLabels: {}
+  commonAnnotations: {}
+
+  # Image defaults (per-workload overrides live under each subchart block).
+  image:
+    # Registry prefix applied to every workload repository unless the workload
+    # sets its own fully-qualified repository.
+    registry: "cdn-images.mistralai.com"
+    # Global default tag; strongly recommend pinning per-workload in production.
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+  # Image pull secrets. Reference existing secrets by name,
+  # OR let the chart create one from `imageCredentials` below.
+  imagePullSecrets: []
+    # - name: mistral-registry
+
+  # Pull-secret name derivation for a chart-created dockerconfigjson secret.
+  imageCredentials:
+    create: false
+    name: "" # defaults to <fullname>-registry
+
+  # ServiceAccount (Workload Identity) shared naming/mount config.
+  serviceAccount:
+    create: true
+    name: ""
+    automountServiceAccountToken: false
+
+  # Secrets shared naming + logical key map (values are set under top-level
+  # `secrets.data`; workloads consume via secretKeyRef only).
+  secrets:
+    name: "" # defaults to <fullname>-secrets
+    keys:
+      mistralApiKey: "mistral-api-key"
+      gemfuryToken: "gemfury-token"
+      githubConnectorToken: "github-connector-token"
+      slackConnectorToken: "slack-connector-token"
+      notionConnectorToken: "notion-connector-token"
+      databaseUrl: "database-url"
+{{#if (has "auth")}}      # Gateway auth secrets (consumed by the APISIX gateway via secretKeyRef,
+      # referenced from apisix.yaml through $env:// interpolation).
+      oidcClientSecret: "oidc-client-secret"
+      gatewaySessionSecret: "gateway-session-secret"
+{{/if}}    externalSecrets:
+      enabled: false
+      targetName: ""
+
+  # Ingress host/apiPath used for CORS and same-origin API routing.
+  ingress:
+    host: "" # defaults to mistralai-capabilities.<baseDomain>
+    apiPath: "/api"
+
+  # Cross-service Service ports (used to build MCP_SERVER_URL).
+  api:
+    service:
+      port: 3000
+{{#if (has "mcp-apps")}}    mcpAppsEnabled: true
+{{/if}}
+
+  # Postgres (TimescaleDB). Source of truth for both the in-cluster dev instance
+  # and the DATABASE_URL derivation in api/workflows/init.
+  postgres:
+{{#if (has "postgres")}}    # True when the postgres capability is in this app's selection; workloads that need
+    # DATABASE_URL gate on it (see common.databaseEnv).
+    enabled: true
+{{/if}}    # Deploy a simple in-cluster Postgres (TimescaleDB) for dev/preview. NOT for prod.
+    deploy: false
+    image:
+      # timescaledb-ha ships `vector`, `vectorscale` (diskann) and `pg_textsearch` (BM25).
+      # An image without those three degrades search to an unindexed sequential scan.
+      # The search plugin skips the indexes rather than failing, so the regression is silent.
+      repository: "timescale/timescaledb-ha"
+      tag: "pg18.4-ts2.29.0"
+      pullPolicy: IfNotPresent
+    auth:
+      username: "postgres"
+      database: "mistralai_capabilities"
+      # Password is read from the chart Secret under this key. When deploy=true and
+      # the key is empty, set it via CI (never commit).
+      passwordSecretKey: "postgres-password"
+    service:
+      port: 5432
+    # External connection details used when deploy=false. api/init assemble a
+    # DATABASE_URL from these unless secrets.data.database-url is provided.
+    host: ""
+    port: 5432
+    persistence:
+      enabled: true
+      size: 20Gi
+      storageClass: ""
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+
+  # Chat (`/api/v1/chat/*`) forwards to the agents session API, which owns a session's
+  # lifecycle and transcript; this app persists neither. It calls `/v2/agents` on
+  # MISTRAL_API_KEY, so chat is off until that key is set and nothing here is a credential.
+  #
+  # An empty field is omitted from the pod rather than passed as "", which the app would read
+  # as a real value. Empty therefore leaves the app's own default in force: agentName defaults to
+  # this release's deploymentName, which the `agents` init step registers against the worker's
+  # session workflow. Set it to `nuage-session` only to front the platform builtin, which cannot
+  # reach this app's orchestrator or tools. applicationName is resolved against the agents API's
+  # registry, so an unregistered name is refused upstream.
+  vibeAgents:
+    agentName: ""
+    applicationName: ""
+    timeoutSeconds: ""
+
+  # Shared pod/container security context (base; per-workload override merged).
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+
+  containerSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    privileged: false
+    capabilities:
+      drop:
+        - ALL
+    seccompProfile:
+      type: RuntimeDefault
+
+{{#if (has "auth")}}# =============================================================================
+# AUTH — edge authentication mode for the APISIX gateway (.Values.auth.*)
+# =============================================================================
+# Edge authentication. The gateway drives OIDC, removes caller-supplied identity
+# headers, and injects x-user-id/x-user-email from verified user info. The API trusts
+# those gateway assertions, so network policy keeps it behind the gateway. No secret VALUES here.
+auth:
+  # OIDC is the only auth mode. The gateway owns token verification and identity-header
+  # injection; the API deliberately does not duplicate JWT/JWKS verification.
+  oidc:
+    # Keycloak realm issuer. Defaults to ingress.oidc.issuerUrl when empty so the
+    # existing ingress.oidc.* stays the single source of truth for the issuer/clientId.
+    issuerUrl: ""
+    clientId: ""
+    realm: ""
+    scope: "openid profile email"
+    # Secret keys (under global.secrets.keys) holding the client secret and the
+    # cookie-signing key. They MUST be different keys.
+    clientSecretKey: "oidcClientSecret"
+    sessionSecretKey: "gatewaySessionSecret"
+
+{{/if}}# =============================================================================
+# PARENT-OWNED RESOURCES (rendered by the umbrella templates/)
+# =============================================================================
+
+# ServiceAccount (create flag + annotations owned by the parent; naming/mount in global).
+serviceAccount:
+  create: true
+  # Cloud Workload Identity annotations (GKE example shown as placeholder).
+  # e.g. iam.gke.io/gcp-service-account: my-sa@project.iam.gserviceaccount.com
+  #      eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/my-role
+  annotations: {}
+
+# Optionally have the chart create a dockerconfigjson pull secret. The create
+# flag + name derivation live under global.imageCredentials (consumed by the
+# common.imagePullSecrets helper); the credential material is set here and
+# injected from CI (never commit real creds).
+imageCredentials:
+  registry: "cdn-images.mistralai.com"
+  username: ""
+  password: ""
+  email: ""
+
+# Secrets delivery. Two mutually-exclusive modes:
+#   1. In-chart Secret (secrets.create=true): keys read from `secrets.data`.
+#   2. ExternalSecrets (secrets.externalSecrets.enabled=true): an ExternalSecret
+#      CR is rendered that syncs from your provider into a k8s Secret.
+# In BOTH modes, workloads consume values via secretKeyRef only.
+secrets:
+  create: true
+
+  # Key/value pairs written into the in-chart Secret. Leave empty here and inject
+  # from CI via `--set-string secrets.data.mistral-api-key=$MISTRAL_API_KEY` etc.
+  data:
+    mistral-api-key: ""
+    # Private registry npm+pypi pull token (build-time secret; kept here for
+    # runtime installs if any workload needs it)
+    gemfury-token: ""
+    # Connector credentials (populated with the connectors feature, Wave 3)
+    github-connector-token: ""
+    slack-connector-token: ""
+    notion-connector-token: ""
+    # Database URL for api/init when using an external managed Postgres.
+    # For the in-chart dev postgres this is derived automatically.
+    database-url: ""
+{{#if (has "auth")}}    # APISIX gateway auth material. oidc-client-secret is the IdP client secret;
+    # gateway-session-secret signs the login cookie and must be a different value. Both are
+    # injected as env vars into the gateway and referenced from apisix.yaml via $env://.
+    oidc-client-secret: ""
+    gateway-session-secret: ""
+{{/if}}
+
+  # External Secrets Operator integration (https://external-secrets.io).
+  externalSecrets:
+    enabled: false
+    refreshInterval: "1h"
+    secretStoreRef:
+      name: "" # e.g. gcp-secret-store / aws-secret-store
+      kind: ClusterSecretStore
+    # Each entry maps a Secret key to a remote reference in your provider.
+    data: []
+    #  - secretKey: mistral-api-key
+    #    remoteRef:
+    #      key: prod/{{projectName}}/mistral-api-key
+
+{{#if (has "auth")}}# Ingress (edge) — only api and web are ever exposed.
+ingress:
+  enabled: true
+  className: "nginx"
+  # Host for the web/edge. api is exposed under the same host on /api by default.
+  host: "" # defaults to mistralai-capabilities.<baseDomain>
+  # cert-manager TLS.
+  tls:
+    enabled: true
+    secretName: "" # defaults to <fullname>-tls
+    # cert-manager cluster issuer name.
+    clusterIssuer: "letsencrypt-prod"
+  # OIDC auth (placeholder). These map to nginx auth-request/oauth2-proxy or an
+  # equivalent gateway. Provide your issuer/clientID at deploy time.
+  oidc:
+    enabled: true
+    issuerUrl: "https://auth.example.com/realms/{{projectName}}"
+    clientId: "{{projectName}}"
+    # Extra annotations forwarded verbatim (auth-url, auth-signin, etc.).
+    annotations: {}
+  # Path routing: /api/* -> api service, /* -> web service.
+  apiPath: "/api"
+  apiPathType: "Prefix"
+  webPath: "/"
+  webPathType: "Prefix"
+  # Extra annotations merged onto the Ingress (in addition to cert-manager/OIDC).
+  annotations: {}
+
+{{/if}}# NetworkPolicy
+networkPolicy:
+  enabled: true
+  # Default-deny all ingress to every pod in this release, then explicit allows.
+  defaultDeny: true
+  # Allow DNS egress (kube-dns) from all pods.
+  allowDNS: true
+
+# =============================================================================
+# SUBCHART TOGGLES / OVERRIDES
+# =============================================================================
+# Each block below maps onto the matching subchart's own values.yaml. Only the `enabled` flag
+# and routing fields consumed by parent-owned templates (containerPort / service.port /
+# expose) are set here; subchart defaults own the rest. Override any subchart value here.
+
+# Each per-app subchart override block is gated by the hidden integration capability that owns the
+# matching subchart. `init` is shared Helm infrastructure and always present.
+{{#if (has "fastapi")}}api:
+  enabled: true
+  containerPort: 3000
+  service:
+    port: 3000
+  autoscaling:
+    enabled: true
+{{#if (has "observability")}}  env:
+    MISTRAL_SDK_TELEMETRY: "dedicated"
+{{/if}}
+
+{{/if}}{{#if (has "tanstack-start")}}web:
+  enabled: true
+  containerPort: 3001
+  service:
+    port: 3001
+  autoscaling:
+    enabled: true
+
+{{/if}}{{#if (has "workflows")}}workflows:
+  enabled: true
+  autoscaling:
+    enabled: false
+{{#if (has "observability")}}  env:
+    MISTRAL_SDK_TELEMETRY: "global"
+    OTEL_ENABLED: "true"
+{{/if}}
+
+{{/if}}init:
+  enabled: true
+{{#if (has "observability")}}  env:
+    MISTRAL_SDK_TELEMETRY: "dedicated"
+{{/if}}
+
+{{#if (has "postgres")}}postgres:
+  enabled: true
+{{/if}}
+
+{{#if (has "auth")}}# =============================================================================
+# GATEWAY — standalone APISIX edge (parent-owned; rendered by templates/gateway-*)
+# =============================================================================
+# A self-contained APISIX data-plane pod fronting api and web. Mirrors the dev
+# docker-compose gateway. It authenticates via OIDC and injects trusted identity headers.
+gateway:
+  # Fail closed: authenticated API routes trust only the gateway's identity assertion.
+  # templates/_validate.tpl therefore refuses ingress when the gateway is disabled.
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: "apache/apisix"
+    tag: "3.17.0-debian"
+    pullPolicy: IfNotPresent
+  containerPort: 9080
+  service:
+    type: ClusterIP
+    port: 9080
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+  podSecurityContext: {}
+  containerSecurityContext: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+
+{{/if}}

@@ -1,0 +1,25 @@
+# Named after the app so two generated apps on one host never share containers, volumes, networks
+# or the init image. Compose lowercases the name and drops characters a project name cannot hold;
+# COMPOSE_PROJECT_NAME (shell or root .env) or `-p` still overrides it. Only the root file's name
+# counts: included overlays carry none.
+name: {{projectName}}
+
+# Hot-reload stack. Init is shared infrastructure owned by `docker-compose`; the gateway root is
+# owned by the hidden `docker-compose-auth` integration. Every service overlay is included only
+# when its hidden integration is effective.
+include:
+{{#if (has "postgres")}}  - compose.postgres.yaml
+{{/if}}  - compose.init.yaml
+{{#if (has "auth")}}  - compose.gateway.yaml
+{{/if}}{{#if (has "bucket")}}  - compose.bucket.yaml
+{{/if}}{{#if (has "fastapi")}}  - path:
+      - compose.api.dev.yaml
+{{#if (has "auth")}}      - compose.api.auth.dev.yaml
+{{/if}}{{/if}}{{#if (has "tanstack-start")}}  - path:
+      - compose.web.dev.yaml
+{{#if (has "auth")}}      - compose.web.auth.dev.yaml
+{{/if}}{{/if}}{{#if (has "workflows")}}  - compose.workflows.dev.yaml
+{{/if}}
+secrets:
+  registry_token:
+    environment: MISTRAL_REGISTRY_TOKEN

@@ -1,0 +1,10 @@
+apiVersion: v2
+name: init
+description: Hardened deployment init for {{projectName}} — one pre-install/pre-upgrade hook Job per init step (migrations, guardrail seed, workflow schedules), rendered from the steps list in values and ordered by hook weight.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+dependencies:
+  - name: common
+    version: 0.1.0
+    repository: "file://../common"

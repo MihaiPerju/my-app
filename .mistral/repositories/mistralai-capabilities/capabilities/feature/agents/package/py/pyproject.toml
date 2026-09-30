@@ -1,0 +1,26 @@
+[project]
+name = "mistralai-capabilities-feature-agents"
+version = "0.1.0"
+description = "Agents capability: assembles the orchestrator Harness from installed capability contributions."
+requires-python = ">=3.12,<3.15"
+license = "LicenseRef-Proprietary"
+dependencies = [
+    # Exact-pinned in lockstep with the app's `packages/py/agents` member and the agent project
+    # (`apps/worker/src/worker/agents/pyproject.toml`): the Unified Harness authoring API moves fast
+    # on the rc line.
+    "mistralai-agents==1.1.0rc6",
+]
+
+
+[build-system]
+requires = ["uv_build>=0.8.22,<0.9.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+# The dist name is fixed by the CLI convention (= `<registry id>-<kind>-<capability id>`);
+# `module-name` keeps the IMPORT path unchanged so no vendored app file has to
+# be edited.
+# `namespace = true` makes this a PEP-420 portion so the sibling capability
+# dists can each ship their own slice of `mistralai_capabilities`.
+module-name = "mistralai_capabilities.agents"
+namespace = true

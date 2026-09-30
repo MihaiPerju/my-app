@@ -1,0 +1,42 @@
+{
+  "id": "tanstack-start",
+  "version": "0.0.0",
+  "title": "TanStack Start",
+  "description": "The app's frontend: a plain TanStack Start application at apps/web \u2014 file-based routes, TanStack Query, Tailwind, public packages only. Other capabilities add pages as route files.",
+  "kind": "frontend",
+  "module": {
+    "serve": "static",
+    "route": "/",
+    "browser": true
+  },
+  "default": true,
+  "categories": [
+    "solutions"
+  ],
+  "dependencies": [
+    "core"
+  ],
+  "packages": [
+    "ts"
+  ],
+  "envVars": {},
+  "metadata": {
+    "weight": 1,
+    "appDir": "apps/web",
+    "port": 3001,
+    "build": {
+      "context": ".",
+      "dockerfile": "deploy/docker/Dockerfile.web",
+      "target": "runtime"
+    },
+    "lifecycle": {
+      "dev": {
+        "startCommand": "bun run dev"
+      },
+      "deploy": {
+        "startCommand": "node .output/server/index.mjs"
+      }
+    },
+    "public": false
+  }
+}

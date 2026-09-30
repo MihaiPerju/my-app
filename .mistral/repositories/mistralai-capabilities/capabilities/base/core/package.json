@@ -1,0 +1,17 @@
+{
+  "name": "@mistralai-capabilities/base-core",
+  "version": "0.0.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./package/ts/index.ts"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.0",
+    "typescript": "catalog:"
+  }
+}

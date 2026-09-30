@@ -1,0 +1,10 @@
+{
+  "extends": "@mistralai-capabilities/config/tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["ESNext", "DOM"],
+    "types": ["bun", "react"],
+    "noEmit": true
+  },
+  "include": ["package/ts/**/*.ts", "package/ts/**/*.tsx"]
+}

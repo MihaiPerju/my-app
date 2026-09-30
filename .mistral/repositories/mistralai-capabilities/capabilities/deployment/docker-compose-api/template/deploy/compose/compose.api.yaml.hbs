@@ -1,0 +1,72 @@
+# The API service, owned by the docker-compose-api integration. Included by the root
+# compose.yaml when FastAPI is installed; optional service dependencies are gated below.
+
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.api
+      target: api
+      # REGISTRY_PY_USER is the HTTP Basic username uv sends to the private Python index. It is a
+      # property of this app's index, so it comes from MISTRAL_REGISTRY_USER in .env. When that is
+      # unset it stays empty, and the Dockerfile falls back to the user tools/uv.sh pins for the
+      # index this app was generated from.
+      args:
+        REGISTRY_PY_USER: ${MISTRAL_REGISTRY_USER:-}
+      secrets:
+        - registry_token
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    # Loopback-only. The gateway on :9080 is the front door; this publication exists
+    # for local debugging and the MCP tunnel, both of which run on this host. Binding
+    # 0.0.0.0 would put a gateway-bypassing path to the API on the LAN.
+    ports:
+      - "127.0.0.1:${API_PORT:-3000}:3000"
+    env_file:
+      - path: ../../.env
+        required: false
+    environment:
+      NODE_ENV: production
+{{#if (has "postgres")}}
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
+{{/if}}
+      # The browser origin of the directly published web service. Derived from WEB_PORT rather
+      # than the root .env's CORS_ORIGIN, which names the host-run dev server.
+      CORS_ORIGIN: http://localhost:${WEB_PORT:-3001}
+      MCP_SERVER_URL: http://api:3000/mcp
+      # Encryption mode is not pinned; it comes from ../../.env, which keeps this service and
+      # `workflows` in agreement. Do not re-add `full` here: any mode but `off` requires
+      # WORKFLOWS_ENCRYPTION_KEY, so pinning it crash-loops a stack with no .env. Unpinned, no
+      # .env boots on the code default `off`; `cp .env.example .env` opts into `partial`.
+      # Discovering the agents workflow imports the Agents SDK, which creates ~/.vibe at import;
+      # the rootfs is read-only, so point HOME at the tmpfs.
+      HOME: /tmp
+    depends_on:
+{{#if (has "postgres")}}
+      postgres:
+        condition: service_healthy
+{{/if}}
+      init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:3000/api/health/live').status==200 else 1)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    # Compose has no preStop hook, so this covers uvicorn's --timeout-graceful-shutdown (20s)
+    # only. Without it the default 10s would SIGKILL the server mid-shutdown.
+    stop_grace_period: 25s
+    restart: unless-stopped

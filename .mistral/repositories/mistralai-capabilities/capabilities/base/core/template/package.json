@@ -1,0 +1,47 @@
+{
+  "name": "app-workspace",
+  "private": true,
+  "workspaces": {
+    "//packages": "Globs, never literals: every member is contributed by a capability, so the set has to follow selection. bun hard-errors on a listed path that does not exist (`error: Workspace not found \"apps/web\"`) but is happy with a glob matching nothing, and skips a matched directory with no package.json — which is what keeps the Python modules `apps/api` and `apps/worker` out. The vendored `@mistral/*` packages under packages/ts/ belong to the `mistral-design-system` capability; packages/ts/README.md documents them and the `overrides` block below.",
+    "packages": [
+      "apps/*",
+      "packages/ts/*"
+    ],
+    "catalog": {
+      "typescript": "^6",
+      "@types/bun": "^1.3.14"
+    }
+  },
+  "type": "module",
+  "scripts": {
+    "build": "nx run-many --target=build",
+    "test": "nx run-many --target=test",
+    "dev:web": "nx run web:dev",
+    "check": "nx run-many --target=build && nx run-many --target=check",
+    "install-all": "bash tools/install.sh",
+    "lock": "bash tools/uv.sh lock"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "nx": "^23.2.1",
+    "typescript": "catalog:"
+  },
+  "//overrides": "Every capability package peer-depends on `@tanstack/react-query` at `^5` and dev-depends on it at the same range. The CLI vendors them as `file:` deps, so bun installs those dev deps nested, and `^5` floats to a newer patch than the exact version apps/web pins -- two versions, so nothing hoists. Two copies is not a size problem: each has its own `QueryClientContext`, so a hook inside a capability package throws `No QueryClient set` under the app's own provider. Pin it here, next to the other cross-package singletons.",
+  "overrides": {
+    "@mistral/common": "workspace:*",
+    "@mistral/i18n": "workspace:*",
+    "@mistral/markdown": "workspace:*",
+    "@mistral/next-hotkey": "workspace:*",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "@tanstack/react-query": "5.101.4",
+    "@tanstack/react-start": "1.168.40",
+    "@tanstack/react-router": "1.170.23",
+    "@tanstack/react-router-devtools": "1.167.1",
+    "@tanstack/router-core": "1.171.19",
+    "@tanstack/router-devtools-core": "1.168.1",
+    "@tanstack/start-server-core": "1.169.23",
+    "@tanstack/start-plugin-core": "1.171.31"
+  },
+  "packageManager": "bun@1.4.0"
+}

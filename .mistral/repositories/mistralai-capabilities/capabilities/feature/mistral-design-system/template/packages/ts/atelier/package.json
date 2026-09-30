@@ -1,0 +1,79 @@
+{
+  "name": "@mistral/atelier",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "//": "Vendored from mistralai-solutions/atelier packages/registry (upstream `@mistralai/atelier`) at 9aad6c3018bcf1ddaf2ae8ed72fc39376647ae54; see README.md. Renamed into the `@mistral/*` scope of its vendored siblings. `exports` mirrors upstream's and adds one subpath per remaining component directory (agent-work, agent-roster, agent-heartbeat, pipeline-stage, disclosure); upstream's `./index.css` and `./tokens/tokens.css` are dropped with the files they pointed at.",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    },
+    "./components/agent-heartbeat": {
+      "default": "./src/components/agent-heartbeat/agent-heartbeat.tsx"
+    },
+    "./components/agent-roster": {
+      "default": "./src/components/agent-roster/agent-roster.tsx"
+    },
+    "./components/agent-status-icon": {
+      "default": "./src/components/agent-status-icon/agent-status-icon.tsx"
+    },
+    "./components/agent-work": {
+      "default": "./src/components/agent-work/agent-work.tsx"
+    },
+    "./components/cross-fade": {
+      "default": "./src/components/cross-fade/cross-fade.tsx"
+    },
+    "./components/disclosure": {
+      "default": "./src/components/disclosure/disclosure-panel.tsx"
+    },
+    "./components/guideline-comparison": {
+      "default": "./src/components/guideline-comparison/guideline-comparison.tsx"
+    },
+    "./components/inline-details": {
+      "default": "./src/components/inline-details/inline-details.tsx"
+    },
+    "./components/overflow-row": {
+      "default": "./src/components/overflow-row/overflow-row.tsx"
+    },
+    "./components/pipeline-stage": {
+      "default": "./src/components/pipeline-stage/pipeline-stage.tsx"
+    },
+    "./components/reference-card": {
+      "default": "./src/components/reference-card/reference-card.tsx"
+    },
+    "./components/sparkline": {
+      "default": "./src/components/sparkline/sparkline.tsx"
+    },
+    "./components/spotlight-list": {
+      "default": "./src/components/spotlight-list/spotlight-list.tsx"
+    },
+    "./components/swarm-grid": {
+      "default": "./src/components/swarm-grid/swarm-grid.tsx"
+    }
+  },
+  "//scripts": "Upstream's scripts (shadcn build, vitest, tsc via its monorepo base) cannot run here and are dropped so nx does not pick this workspace member up as a build/test target. The one pure-logic unit test runs under `bun test`.",
+  "//dependencies": "src/ imports four bare specifiers: `react`, `@mistralai/ui/*` (peer, pinned to the exact version `@app/mistral-design-system` pins so there is one copy), `framer-motion` (the same major @mistralai/ui uses) and `nucleo-sharp` (icons; an upstream peer, made a real dependency here because nothing else in the app provides it). nucleo-sharp declares a license-check `preinstall` script; bun does not run lifecycle scripts of untrusted dependencies, so it installs without one.",
+  "dependencies": {
+    "framer-motion": "^12",
+    "nucleo-sharp": "1.5.1"
+  },
+  "peerDependencies": {
+    "@mistralai/ui": "86.1.0",
+    "react": ">=19.2.0"
+  },
+  "//peerDependenciesMeta": "Optional so this member never installs `@mistralai/ui` on its own: the dependency-only `@app/mistral-design-system` member pins it as a real dependency, so the app has exactly one pin to bump. It also keeps this plain manifest installable at the CLI's first install, which runs before .npmrc maps the private scope.",
+  "peerDependenciesMeta": {
+    "@mistralai/ui": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@mistral/tsconfig": "workspace:*",
+    "@types/bun": "catalog:",
+    "@types/react": "^19.2.17"
+  }
+}

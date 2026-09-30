@@ -1,0 +1,3 @@
+{{- if .Values.enabled }}
+{{- include "common.deployment" (dict "root" . "component" "workflows" "workload" .Values) }}
+{{- end }}

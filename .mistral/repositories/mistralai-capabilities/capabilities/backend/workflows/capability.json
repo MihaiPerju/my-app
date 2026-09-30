@@ -1,0 +1,46 @@
+{
+  "id": "workflows",
+  "version": "0.0.0",
+  "title": "Workflows",
+  "description": "The app's durable worker: a uv project at apps/worker running the Temporal-backed workflow worker. It exposes no public port.",
+  "kind": "backend",
+  "module": {
+    "serve": "worker"
+  },
+  "default": true,
+  "categories": [
+    "solutions"
+  ],
+  "dependencies": [
+    "core"
+  ],
+  "packages": [
+    "ts",
+    "py"
+  ],
+  "envVars": {
+    "DEPLOYMENT_NAME": "deployment-{{app_name}}-{{env:USER}}",
+    "WORKFLOWS_BASE_URL": "https://api.mistral.ai",
+    "WORKFLOWS_ENCRYPTION_MODE": "partial",
+    "WORKFLOWS_ENCRYPTION_KEY": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+    "WORKFLOWS_ENCRYPTION_PREVIOUS_KEY": "",
+    "ACTIVITY_READ_RETRY_MAX_ATTEMPTS": "3",
+    "ACTIVITY_MUTATION_RETRY_MAX_ATTEMPTS": "1",
+    "ACTIVITY_RETRY_BACKOFF_COEFFICIENT": "2.0"
+  },
+  "metadata": {
+    "weight": 1,
+    "appDir": "apps/worker",
+    "platform": "workflows",
+    "build": {
+      "context": ".",
+      "dockerfile": "deploy/docker/Dockerfile.worker"
+    },
+    "lifecycle": {
+      "dev": {
+        "startCommand": "uv run --all-packages python -m worker.entrypoints.dev"
+      }
+    },
+    "public": false
+  }
+}

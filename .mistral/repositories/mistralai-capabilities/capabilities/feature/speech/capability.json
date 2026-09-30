@@ -1,0 +1,29 @@
+{
+  "id": "speech",
+  "version": "0.0.0",
+  "title": "Speech",
+  "description": "Speech capability: transcription and synthesis workflow activities, the /v1/speech routes, and chat's dictation and read-aloud.",
+  "kind": "feature",
+  "categories": [
+    "solutions"
+  ],
+  "dependencies": [
+    "core",
+    "fastapi",
+    "tanstack-start",
+    "workflows",
+    "auth",
+    "chat"
+  ],
+  "packages": [
+    "ts",
+    "py"
+  ],
+  "envVars": {
+    "MISTRAL_API_KEY": ""
+  },
+  "metadata": {
+    "weight": 20,
+    "public": false
+  }
+}

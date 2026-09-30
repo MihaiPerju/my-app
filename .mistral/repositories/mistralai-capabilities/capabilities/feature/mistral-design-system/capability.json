@@ -1,0 +1,24 @@
+{
+  "id": "mistral-design-system",
+  "version": "0.0.0",
+  "title": "Mistral Design System",
+  "description": "The Mistral look for apps/web: @mistralai/ui with its theme and fonts, the sidebar app shell as a pathless `_app` layout route whose nav is read from each route's staticData, the shared page components, and the vendored atelier components under packages/ts/atelier.",
+  "kind": "feature",
+  "default": true,
+  "categories": [
+    "solutions"
+  ],
+  "dependencies": [
+    "core",
+    "tanstack-start"
+  ],
+  "packages": [
+    "ts"
+  ],
+  "envVars": {},
+  "metadata": {
+    "weight": 2,
+    "public": false,
+    "registryPins": [".npmrc.hbs", ".npmrc.example"]
+  }
+}

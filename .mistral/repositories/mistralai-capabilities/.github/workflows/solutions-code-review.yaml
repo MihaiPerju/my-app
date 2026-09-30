@@ -1,0 +1,32 @@
+name: Solutions Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: solutions-code-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  code-review:
+    name: Solutions Code Review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout pull request head
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Run Solutions code review
+        uses: mistralai-solutions/solutions-code-review@c90bcdee5ab15ffe43bb37aee7a2945f16913a54 # 1.0.2
+        with:
+          mistral_api_key: ${{ secrets.CODE_REVIEW_MISTRAL_API_KEY }}
+          gemfury_token: ${{ secrets.GEMFURY_DEPLOY_TOKEN }}
+          github_app_id: ${{ secrets.CODE_REVIEW_GITHUB_APP_ID }}
+          github_app_private_key: ${{ secrets.CODE_REVIEW_GITHUB_APP_PRIVATE_KEY }}
+          profile: thermo-nuclear

@@ -1,0 +1,13 @@
+{
+  "name": "@mistral/tailwind-config",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./web.css": "./web.css"
+  },
+  "license": "MIT",
+  "//": "The design system's THEME, vendored out of the monorepo `@mistralai/ui` is published from (ts/tooling/tailwind). It is the fifth vendored member and the only one that is not a dependency of `@mistralai/ui`: the other four exist so root `overrides` can satisfy the package's own import edges, whereas this one is imported directly by apps/web. `@mistralai/ui` 86.x (86.1.0 byte-identical to 86.0.0) does ship the same theme as `@mistralai/ui/web.css`, but verbatim it loads a Tailwind v3 typography config, imports `tw-animate-css` a second time, and maps shadcn tokens nothing here defines (web.css lists the deletions), so apps/web imports this re-synced copy instead. Without it every `bg-default` / `text-muted` / `border-default` a DS component renders is undefined.",
+  "//exports": "Upstream also exports `./native` and `./native.css` for React Native. Neither is vendored: there is no native target here, and `./native` is a .ts entry that would drag `tailwindcss3` and postcss into a CSS-only package. Add them back only alongside a consumer.",
+  "//dependencies": "Deliberately none. Upstream's (`@tailwindcss/typography`, `tw-animate-css`, …) are all reached through the `@config`/`@plugin`/`@import` lines this copy no longer carries — see the header comment in web.css for why each was dropped. `tailwindcss` itself is the app's, resolved from apps/web where the stylesheet is imported."
+}

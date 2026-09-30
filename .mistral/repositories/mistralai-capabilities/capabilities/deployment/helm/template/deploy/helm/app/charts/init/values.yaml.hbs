@@ -1,0 +1,62 @@
+# Deployment init: one pre-install/pre-upgrade hook Job per step, each running
+# `python -m cli <step>` from packages/py/cli. It uses the API image, which carries
+# every workspace package, so the deployment needs no dedicated migrate image. Every step is
+# idempotent, so the Jobs are safe to re-run on each release. common.extraEnv injects
+# DATABASE_URL and MISTRAL_API_KEY into every init-* component.
+enabled: true
+image:
+  repository: "docker/solutions/{{projectName}}-api"
+  tag: ""
+  pullPolicy: ""
+args: []
+env:
+  APP_NAME: "init"
+  LOG_FORMAT: "json"
+{{#if (has "search")}}  SEARCH_BACKEND: "postgres"
+{{/if}}  UV_CACHE_DIR: "/tmp/uv-cache"
+  # The schedules step imports the Agents SDK, whose vibe dependency creates ~/.vibe at
+  # import time; the rootfs is read-only, so HOME must point at the tmpfs.
+  HOME: "/tmp"
+backoffLimit: 3
+# The steps, lowest hook weight first. Adding a step is adding a file under
+# packages/py/cli/src/cli/commands and an entry here. Each entry may also carry `enabled: false`
+# or its own `resources`, which override the defaults below for that step alone.
+steps:
+{{#if (has "postgres")}}  - name: migrations
+    hookWeight: -40
+{{/if}}{{#if (has "custom-rbac")}}  # Seeds the configured bootstrap admins into the schema migrations creates, so a fresh
+  # deployment has an admin able to reach the admin API. Idempotent; a no-op with none configured.
+  - name: custom-rbac
+    hookWeight: -30
+{{/if}}{{#if (has "guardrailing")}}  # Seeds a corpus into the schema migrations creates.
+  - name: guardrail
+    hookWeight: -20
+{{/if}}{{#if (has "agents")}}  # Publishes agent/instructions.md to the AI Studio prompt registry. Ordered before the
+  # worker's group so a fresh worker resolves the registry version on its first boot. Touches
+  # no schema, and is a no-op unless PROMPT_REGISTRY_ENABLED is on.
+  - name: prompts
+    hookWeight: -18
+{{/if}}{{#if (has "chat")}}  # Binds this deployment's agent name to the session workflow its worker serves, so the
+  # control plane can route a chat session here. Ordered before `schedules` only because it
+  # touches nothing either schema owns; it is idempotent and safe to re-run.
+  - name: agents
+    hookWeight: -15
+{{/if}}{{#if (has "evals")}}  # Starts firing workflows that read and write both schemas, so it goes last.
+  - name: schedules
+    hookWeight: -10
+{{/if}}
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "500m"
+    memory: 512Mi
+writableVolumes:
+  - name: tmp
+    mountPath: /tmp
+podSecurityContext: {}
+containerSecurityContext: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

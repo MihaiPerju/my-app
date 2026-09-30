@@ -1,0 +1,68 @@
+{{ .Chart.Name }} v{{ .Chart.Version }} ({{ .Chart.AppVersion }}) deployed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+Workloads:
+{{- if (.Values.api).enabled }}
+  - api        HTTP :{{ .Values.api.containerPort }}  (Service: {{ include "common.apiServiceName" . }})
+{{- end }}
+{{- if and (.Values.api).enabled (default false (.Values.global.api).mcpAppsEnabled) }}
+               MCP mounted at /mcp
+{{- end }}
+{{- if (.Values.web).enabled }}
+  - web        HTTP :{{ .Values.web.containerPort }}  (Service: {{ include "common.componentName" (dict "root" . "component" "web") }})
+{{- end }}
+{{- if (.Values.workflows).enabled }}
+  - workflows  (Mistral workflow worker; no Service)
+{{- end }}
+{{- if (.Values.gateway).enabled }}
+  - gateway    APISIX :{{ .Values.gateway.containerPort }}  (edge auth; Service: {{ include "common.componentName" (dict "root" . "component" "gateway") }})
+{{- end }}
+
+Edge authentication:
+{{- if (.Values.gateway).enabled }}
+  Gateway: APISIX (ENABLED), OIDC via issuer {{ include "gateway.oidc.issuerUrl" . }} (client {{ include "gateway.oidc.clientId" . }}).
+  The gateway removes caller-supplied x-user-id/x-user-email headers, derives them from
+  verified OIDC user info, and forwards those trusted headers to the API. The API trusts
+  this gateway assertion, so its Service must remain reachable only through the gateway.
+{{- else }}
+  Gateway: DISABLED — no external ingress is rendered; use the in-cluster API and web Services.
+{{- end }}
+
+Access:
+{{- if (.Values.ingress).enabled }}
+  URL: {{ if .Values.ingress.tls.enabled }}https{{ else }}http{{ end }}://{{ default (printf "%s.%s" (default "app" .Values.global.appName) .Values.global.baseDomain) .Values.ingress.host }}
+       - Web served at {{ .Values.ingress.webPath }}
+       - API served at {{ .Values.ingress.apiPath }}
+  {{- if (.Values.gateway).enabled }}
+       - Both routed through the APISIX gateway Service on :{{ .Values.gateway.service.port }}.
+  {{- end }}
+{{- else }}
+  Ingress is disabled. Reach services in-cluster via their ClusterIP Services.
+{{- end }}
+
+Dependencies:
+{{- if .Values.global.postgres.deploy }}
+  Postgres (pgvector) deployed IN-CLUSTER for dev — NOT production-grade.
+{{- else }}
+  Postgres: external ({{ default "set global.postgres.host or secrets.data.database-url" .Values.global.postgres.host }})
+{{- end }}
+  Workflows: Mistral-hosted (config discovery via MISTRAL_API_KEY + DEPLOYMENT_NAME).
+
+Security posture (enforced on every workload):
+  runAsNonRoot=true, uid/gid 1000, readOnlyRootFilesystem=true, drop ALL caps,
+  no privilege escalation, seccomp RuntimeDefault, CPU+memory requests AND limits.
+  NetworkPolicy default-deny={{ .Values.networkPolicy.defaultDeny }};
+  MCP enabled={{ default false (.Values.global.api).mcpAppsEnabled }}; search uses DATABASE_URL + SEARCH_BACKEND.
+
+Secrets:
+{{- if .Values.secrets.externalSecrets.enabled }}
+  Delivered via ExternalSecret from store "{{ .Values.secrets.externalSecrets.secretStoreRef.name }}".
+{{- else if .Values.secrets.create }}
+  Delivered via in-chart Secret "{{ include "common.secretName" . }}" (populate from CI).
+{{- else }}
+  Referencing pre-existing Secret "{{ include "common.secretName" . }}".
+{{- end }}
+  Verify the DB migration hook Job completed:
+    kubectl -n {{ .Release.Namespace }} get jobs -l app.kubernetes.io/component=init
+
+Check rollout:
+  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }}

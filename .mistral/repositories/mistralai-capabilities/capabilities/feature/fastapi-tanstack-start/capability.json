@@ -1,0 +1,23 @@
+{
+  "id": "fastapi-tanstack-start",
+  "version": "0.0.0",
+  "title": "FastAPI \u2014 TanStack Start",
+  "description": "FastAPI \u00d7 TanStack Start integration. Owns the typed API client apps/web generates from the FastAPI OpenAPI contract (hey-api, under src/api/), its runtime base-URL config and the VITE_API_URL env schema. Hidden: it activates automatically when FastAPI and TanStack Start are both effective.",
+  "kind": "feature",
+  "visible": false,
+  "activatedWhen": {
+    "allOf": [
+      "fastapi",
+      "tanstack-start"
+    ]
+  },
+  "categories": [
+    "solutions"
+  ],
+  "packages": [],
+  "envVars": {},
+  "metadata": {
+    "weight": 2,
+    "public": false
+  }
+}

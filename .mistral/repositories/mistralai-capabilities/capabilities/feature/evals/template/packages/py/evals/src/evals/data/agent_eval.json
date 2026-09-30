@@ -1,0 +1,17 @@
+[
+  {
+    "message": "Search my ingested corpus for the refund policy and cite the source.",
+    "expected_keywords": ["search", "source"],
+    "expected": "Uses search to retrieve grounded results and cites the source."
+  },
+  {
+    "message": "Is this message safe to show users: 'have a great day'?",
+    "expected_keywords": ["moderation", "safe"],
+    "expected": "Uses moderation to classify the text and reports it is safe."
+  },
+  {
+    "message": "Summarize the open issues in my GitHub repository.",
+    "expected_keywords": ["github", "issue"],
+    "expected": "Routes to the GitHub connector specialist to fetch and summarize issues."
+  }
+]

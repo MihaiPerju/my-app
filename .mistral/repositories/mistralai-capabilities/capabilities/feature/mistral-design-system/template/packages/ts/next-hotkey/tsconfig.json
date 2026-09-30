@@ -1,0 +1,9 @@
+{
+  "extends": "@mistral/tsconfig/tsconfig.internal-package.json",
+  "include": ["src"],
+  "compilerOptions": {
+    "lib": ["dom", "ES2022", "dom.iterable"],
+    "rootDir": "src"
+  },
+  "exclude": ["node_modules"]
+}

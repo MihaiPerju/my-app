@@ -1,0 +1,21 @@
+{
+  "id": "github-automation",
+  "version": "0.0.0",
+  "title": "GitHub automation",
+  "description": "Default GitHub CI and dependency-update automation for the generated repository: a concern-focused CI workflow (Python lint/format/type-check and tests always, plus TypeScript, agent, Postgres-contract, and Docker Compose end-to-end jobs that appear only when the matching capability is installed), the Solutions security gate, and a Renovate configuration. Template-only: it ships no published package, only files vendored into the app through the Git source, and its emitted workflows reference only commands and assets that exist in the selected closure.",
+  "kind": "tooling",
+  "default": true,
+  "categories": [
+    "solutions"
+  ],
+  "dependencies": [
+    "code-quality",
+    "testing"
+  ],
+  "packages": [],
+  "envVars": {},
+  "metadata": {
+    "weight": 62,
+    "public": false
+  }
+}

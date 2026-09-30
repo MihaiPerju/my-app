@@ -1,0 +1,37 @@
+line-length = 120
+# Ruff formats Python code blocks inside Markdown from 0.16. Exclude `*.md`: agent skill prose may
+# contain elided teaching snippets, while executable scripts under `.agents/skills/**` remain linted.
+# `.mistral/repositories/` is a vendored copy of the registry; linting it duplicates files and makes
+# isort report phantom violations. The path-loaded agent slots have their own directory-scoped static
+# analysis and are excluded here.
+extend-exclude = ["*.md", ".mistral", "apps/worker/src/worker/agents"]
+
+[lint]
+# ASYNC (flake8-async) is the required addition: nearly every activity, workflow and route here is a
+# coroutine, so a blocking call or an un-awaited timeout is the defect class most likely to reach
+# production. B/UP/RUF are the general correctness and modernization set. S (bandit) is absent: it
+# is noisy enough to deserve its own pass.
+# FAST (flake8-fastapi) catches route declarations that contradict themselves: a `response_model=`
+# the return annotation already states, and a `Depends`/`Query` default that should be `Annotated`.
+# PGH003 bans a blanket `# type: ignore`, which silences whatever breaks next, not just today's
+# error. Both are native Ruff, both were clean after this commit, and neither needs a baseline.
+select = ["E", "F", "W", "Q", "I", "T201", "ASYNC", "B", "UP", "RUF", "FAST", "PGH003"]
+ignore = ["E203"]
+fixable = ["ALL"]
+
+[lint.per-file-ignores]
+".agents/skills/capability-workflows/scripts/test_workflow.py" = ["ASYNC109"]
+
+[lint.flake8-bugbear]
+# B008 flags a call in a default argument, which is a bug only when the object is shared and mutable.
+# These are not. `Depends(...)` is the FastAPI/workflow DI marker, replaced per call; `typer.Option`
+# and `typer.Argument` are Typer's per-call CLI-parameter markers; `IngestContext()` /
+# `RetrievalContext()` are frozen pydantic models the store protocol requires.
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "mistralai.workflows.Depends",
+    "mistralai.search.toolkit.context.IngestContext",
+    "mistralai.search.toolkit.context.RetrievalContext",
+    "typer.Argument",
+    "typer.Option",
+]

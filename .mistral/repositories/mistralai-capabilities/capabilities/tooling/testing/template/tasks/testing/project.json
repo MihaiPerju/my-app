@@ -1,0 +1,23 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "testing",
+  "projectType": "library",
+  "targets": {
+    "test": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash tools/testing.sh test", "cwd": "{workspaceRoot}" }
+    },
+    "test-cov": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash tools/testing.sh test-cov", "cwd": "{workspaceRoot}" }
+    },
+    "test-web-cov": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash tools/testing.sh test-web-cov", "cwd": "{workspaceRoot}" }
+    },
+    "check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash tools/testing.sh check", "cwd": "{workspaceRoot}" }
+    }
+  }
+}

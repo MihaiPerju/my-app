@@ -1,0 +1,22 @@
+{
+  "id": "helm-workflows",
+  "version": "0.0.0",
+  "title": "Helm — Workflows",
+  "description": "Helm × Workflows integration. Owns the workflows worker subchart adapter at deploy/helm/app/charts/workflows. Hidden: it activates automatically when both helm and workflows are effective, and selecting it directly is shorthand for that pair. Template-only; delivered through the Git source.",
+  "kind": "deployment",
+  "visible": false,
+  "activatedWhen": {
+    "allOf": [
+      "helm",
+      "workflows"
+    ]
+  },
+  "categories": [
+    "solutions"
+  ],
+  "packages": [],
+  "metadata": {
+    "weight": 52,
+    "public": false
+  }
+}

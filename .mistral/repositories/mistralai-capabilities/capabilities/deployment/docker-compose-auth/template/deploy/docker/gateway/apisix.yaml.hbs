@@ -1,0 +1,211 @@
+# The gateway is the only component that validates identity. It authenticates against Keycloak and
+# passes the upstream a plain `x-user-id`. The API does not verify tokens, so the API must be
+# unreachable except through here (see the loopback binds in deploy/compose and the NetworkPolicy
+# in deploy/helm). Do not add the Kubernetes probe paths; the kubelet probes the pod IP directly.
+# In a proxy-rewrite block, never name one header in both `remove` and `set`: APISIX 3.17 runs
+# add->set->remove, so `remove` wins. Never put X-Userinfo in `remove`; it runs before the
+# access-phase function reads it and every request returns 401.
+#
+# api and web are optional modules, so their routes are gated on the same has-selection the root
+# compose file uses to include their service overlays — a route to an upstream that was not
+# vendored would only 502. Either may be installed without the other, so the `routes:` key is
+# written by the API block, or by the web block when there is no API; an app with neither renders
+# an empty standalone config (just this comment and the END marker), which APISIX accepts.
+#
+# APISIX interpolates its own env references at config-load time with a dollar-double-brace syntax.
+# Handlebars would consume that as a template expression and blank the secret, so each env
+# reference is backslash-escaped and renders back to the literal APISIX form. Do not remove the
+# backslash before the braces on the client_secret and session secret lines.
+{{#if (has "fastapi")}}routes:
+  - uri: /api/health
+    priority: 20
+    upstream:
+      nodes:
+        "api:3000": 1
+      type: roundrobin
+    plugins:
+      proxy-rewrite:
+        headers:
+          remove: ["x-user-id", "x-user-email"]
+          set:
+            X-Forwarded-Host: "$host"
+            X-Forwarded-Proto: "$scheme"
+            X-Forwarded-For: "$remote_addr"
+
+  - uri: /api/*
+    priority: 10
+    upstream:
+      nodes:
+        "api:3000": 1
+      type: roundrobin
+    plugins:
+      openid-connect:
+        client_id: app
+        client_secret: $\{{GATEWAY_OIDC_CLIENT_SECRET}}
+        discovery: http://keycloak:8080/realms/{{projectName}}/.well-known/openid-configuration
+        realm: {{projectName}}
+        scope: openid profile email
+        # Validate a presented bearer token by asking Keycloak directly. Use introspection, not
+        # use_jwks: use_jwks validates `iss` locally, but Keycloak's issuer depends on the URL used
+        # to reach it, so a token and a discovery doc reached by different URLs disagree.
+        # Introspection also honors revocation. Do not set bearer_only: with no bearer the plugin
+        # falls through to the session flow, so one route serves the browser and API clients.
+        introspection_endpoint: http://keycloak:8080/realms/{{projectName}}/protocol/openid-connect/token/introspect
+        # The claim source for the injection below. Stripped again before the request
+        # leaves the gateway, so the upstream only ever sees x-user-id/x-user-email.
+        set_userinfo_header: true
+        # The app verifies nothing, so forwarding the raw token would only widen the
+        # blast radius of anything able to read upstream request headers.
+        set_access_token_header: false
+        access_token_in_authorization_header: false
+        set_id_token_header: false
+        # XHR callers need a 401, not a 302 to the login page.
+        unauth_action: deny
+        # Do NOT add session_contents without `user: true` — X-Userinfo would vanish on
+        # cookie-authenticated requests and every caller would 401.
+        session:
+          secret: $\{{GATEWAY_SESSION_SECRET}}
+      proxy-rewrite:
+        headers:
+          remove: ["x-user-id", "x-user-email"]
+          set:
+            X-Forwarded-Host: "$host"
+            X-Forwarded-Proto: "$scheme"
+            X-Forwarded-For: "$remote_addr"
+      serverless-pre-function:
+        phase: access
+        functions:
+          - |
+            return function(conf, ctx)
+              local core = require("apisix.core")
+              local raw = core.request.header(ctx, "X-Userinfo")
+              if not raw then
+                core.log.error("edge-auth: X-Userinfo absent; set_userinfo_header must be true")
+                return 401, { detail = "Identity unavailable" }
+              end
+              local payload = ngx.decode_base64(raw)
+              if not payload then
+                core.log.error("edge-auth: X-Userinfo is not valid base64")
+                return 401, { detail = "Identity unavailable" }
+              end
+              local claims, err = core.json.decode(payload)
+              if not claims or not claims.sub then
+                core.log.error("edge-auth: no sub claim: ", err or "nil")
+                return 401, { detail = "Identity unavailable" }
+              end
+              core.request.set_header(ctx, "X-User-Id", claims.sub)
+              core.request.set_header(ctx, "X-User-Email", claims.email)
+              core.request.set_header(ctx, "X-Userinfo", nil)
+              core.request.set_header(ctx, "X-ID-Token", nil)
+              core.request.set_header(ctx, "X-Refresh-Token", nil)
+              -- openid-connect has already consumed the bearer token by this phase, and
+              -- the app never reads it. Dropping it keeps raw credentials out of the
+              -- upstream's request logs and error reports.
+              core.request.set_header(ctx, "Authorization", nil)
+            end
+
+{{#if (has "mcp-apps")}}
+  - uris:
+      - /mcp
+      - /mcp/*
+    upstream:
+      nodes:
+        "api:3000": 1
+      type: roundrobin
+    plugins:
+      openid-connect:
+        client_id: app
+        client_secret: $\{{GATEWAY_OIDC_CLIENT_SECRET}}
+        discovery: http://keycloak:8080/realms/{{projectName}}/.well-known/openid-configuration
+        realm: {{projectName}}
+        # MCP clients are machines: they present a bearer token rather than following
+        # a login redirect, so a token is strictly required here.
+        bearer_only: true
+        introspection_endpoint: http://keycloak:8080/realms/{{projectName}}/protocol/openid-connect/token/introspect
+        unauth_action: deny
+        set_userinfo_header: true
+        set_access_token_header: false
+        access_token_in_authorization_header: false
+        set_id_token_header: false
+        session:
+          secret: $\{{GATEWAY_SESSION_SECRET}}
+      proxy-rewrite:
+        headers:
+          remove: ["x-user-id", "x-user-email"]
+          set:
+            X-Forwarded-Host: "$host"
+            X-Forwarded-Proto: "$scheme"
+            X-Forwarded-For: "$remote_addr"
+      serverless-pre-function:
+        phase: access
+        functions:
+          - |
+            return function(conf, ctx)
+              local core = require("apisix.core")
+              local raw = core.request.header(ctx, "X-Userinfo")
+              if not raw then
+                core.log.error("edge-auth: X-Userinfo absent; set_userinfo_header must be true")
+                return 401, { detail = "Identity unavailable" }
+              end
+              local payload = ngx.decode_base64(raw)
+              if not payload then
+                core.log.error("edge-auth: X-Userinfo is not valid base64")
+                return 401, { detail = "Identity unavailable" }
+              end
+              local claims, err = core.json.decode(payload)
+              if not claims or not claims.sub then
+                core.log.error("edge-auth: no sub claim: ", err or "nil")
+                return 401, { detail = "Identity unavailable" }
+              end
+              core.request.set_header(ctx, "X-User-Id", claims.sub)
+              core.request.set_header(ctx, "X-User-Email", claims.email)
+              core.request.set_header(ctx, "X-Userinfo", nil)
+              core.request.set_header(ctx, "X-ID-Token", nil)
+              core.request.set_header(ctx, "X-Refresh-Token", nil)
+              -- openid-connect has already consumed the bearer token by this phase, and
+              -- the app never reads it. Dropping it keeps raw credentials out of the
+              -- upstream's request logs and error reports.
+              core.request.set_header(ctx, "Authorization", nil)
+            end
+{{/if}}
+
+{{/if}}{{#if (has "tanstack-start")}}{{#unless (has "fastapi")}}routes:
+{{/unless}}  - uri: /*
+    priority: 1
+    # Pass WebSocket upgrades through, so the Vite dev server's HMR socket (same origin, carried by
+    # the session cookie) reaches web. Without it the upgrade is proxied as a plain GET and answered
+    # with the app's redirect, and every edit needs a manual reload.
+    enable_websocket: true
+    upstream:
+      nodes:
+        "web:3001": 1
+      type: roundrobin
+    plugins:
+      # The web app renders from its session cookie and never reads an identity header,
+      # so this route authenticates and strips but does not inject. A browser navigating
+      # to a page is sent to the IdP rather than handed a 401.
+      openid-connect:
+        client_id: app
+        client_secret: $\{{GATEWAY_OIDC_CLIENT_SECRET}}
+        discovery: http://keycloak:8080/realms/{{projectName}}/.well-known/openid-configuration
+        realm: {{projectName}}
+        scope: openid profile email
+        # Same reason as /api/*: without a bearer validator the plugin only ever takes
+        # the session branch, so a token-carrying client (the smoke test, any scripted
+        # fetch of the shell) gets bounced to the login page instead of served.
+        introspection_endpoint: http://keycloak:8080/realms/{{projectName}}/protocol/openid-connect/token/introspect
+        set_userinfo_header: false
+        set_access_token_header: false
+        access_token_in_authorization_header: false
+        set_id_token_header: false
+        session:
+          secret: $\{{GATEWAY_SESSION_SECRET}}
+      proxy-rewrite:
+        headers:
+          remove: ["x-user-id", "x-user-email"]
+          set:
+            X-Forwarded-Host: "$host"
+            X-Forwarded-Proto: "$scheme"
+            X-Forwarded-For: "$remote_addr"
+
+{{/if}}#END

@@ -1,0 +1,28 @@
+{
+  "id": "apps-fastapi",
+  "version": "0.0.0",
+  "title": "Mistral Apps — API",
+  "description": "Mistral Apps × API integration. Mounts the gateway's caller token on the FastAPI host through `apps/api/src/api/configure/`, so a route that calls the Mistral API on someone's behalf spends their token. Hidden: it activates automatically when both `apps` and `fastapi` are effective, and selecting it directly is shorthand for that pair.",
+  "kind": "deployment",
+  "visible": false,
+  "activatedWhen": {
+    "allOf": [
+      "apps",
+      "fastapi"
+    ]
+  },
+  "categories": [
+    "solutions"
+  ],
+  "packages": [
+    "ts"
+  ],
+  "preStart": {
+    "dev": ["uv run --all-packages python -m cli pre-start"],
+    "deploy": ["uv run --frozen --no-dev --no-sync python -m cli pre-start"]
+  },
+  "metadata": {
+    "weight": 39,
+    "public": false
+  }
+}

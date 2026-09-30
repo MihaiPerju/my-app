@@ -1,0 +1,6 @@
+[workspace]
+resolver = "2"
+# members auto-added as capabilities/*/package/rs by 'mistral apps capability init'
+# (cargo does not glob-expand members, and a glob errors `cargo metadata` at
+# zero matches, so the list starts empty and gains concrete paths on demand).
+members = []

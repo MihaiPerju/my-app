@@ -1,0 +1,41 @@
+{
+  "id": "postgres",
+  "version": "0.0.0",
+  "title": "Postgres",
+  "description": "Postgres persistence: the first-boot extension script and the app-local db package (the async engine and session factory, the Alembic setup, and the models, accessors, and migrations directories that the feature capabilities owning each table fill in). Hidden deployment integrations contribute its Docker Compose overlay and Helm subchart when their deployment capability is selected.",
+  "kind": "database",
+  "default": true,
+  "categories": [
+    "solutions"
+  ],
+  "dependencies": [
+    "core"
+  ],
+  "packages": [
+    "ts"
+  ],
+  "database": {
+    "engine": "postgres"
+  },
+  "envVars": {
+    "DATABASE_URL": "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres",
+    "POSTGRES_HOST": "",
+    "POSTGRES_PORT": "5432",
+    "POSTGRES_USER": "postgres",
+    "POSTGRES_PASSWORD": "",
+    "POSTGRES_DB": "postgres",
+    "POSTGRES_SSL_MODE": "",
+    "DB_ECHO": "false",
+    "DB_POOL_SIZE": "5",
+    "DB_MAX_OVERFLOW": "10",
+    "DB_POOL_PRE_PING": "true",
+    "INIT_MIGRATIONS_DB_READY_TIMEOUT_SECONDS": "90.0",
+    "INIT_MIGRATIONS_DB_READY_SUCCESSES": "3",
+    "INIT_MIGRATIONS_DB_READY_INTERVAL_SECONDS": "2.0",
+    "INIT_MIGRATIONS_DB_READY_PING_TIMEOUT_SECONDS": "2.0"
+  },
+  "metadata": {
+    "weight": 15,
+    "public": false
+  }
+}

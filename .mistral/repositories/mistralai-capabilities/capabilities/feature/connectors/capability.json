@@ -1,0 +1,22 @@
+{
+  "id": "connectors",
+  "version": "0.0.0",
+  "title": "Connectors",
+  "description": "Fifteen external-service connectors (Atlassian, Box, GitHub, Gmail, Google Calendar/Drive, Linear, Notion, Outlook (+Calendar), SharePoint (+Graph/Online), Slack, Stripe) as agents.connector slots merged into the single orchestrator Harness.",
+  "kind": "feature",
+  "categories": [
+    "solutions"
+  ],
+  "dependencies": [
+    "core",
+    "agents"
+  ],
+  "packages": [
+    "ts"
+  ],
+  "envVars": {},
+  "metadata": {
+    "weight": 25,
+    "public": false
+  }
+}

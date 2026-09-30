@@ -1,0 +1,15 @@
+[
+  "mistralai-capabilities/backend/fastapi",
+  "mistralai-capabilities/feature/mcp-apps",
+  "mistralai-capabilities/backend/workflows",
+  "mistralai-capabilities/database/bucket",
+  "mistralai-capabilities/deployment/apps",
+  "mistralai-capabilities/feature/agents",
+  "mistralai-capabilities/feature/evals",
+  "mistralai-capabilities/feature/experiments",
+  "mistralai-capabilities/feature/fastapi-workflows-auth",
+  "mistralai-capabilities/feature/guardrailing-eval",
+  "mistralai-capabilities/feature/document-annotation-ui",
+  "mistralai-capabilities/feature/custom-rbac",
+  "mistralai-capabilities/feature/search"
+]

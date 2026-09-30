@@ -1,0 +1,5 @@
+# The descriptor payload is written here by scripts/release/pack-all.ts at release time,
+# once per package index. Committing a copy would let it drift from the
+# authoritative root registry.json AND force one index's `sources` on every
+# consumer -- see the README.
+/registry.json

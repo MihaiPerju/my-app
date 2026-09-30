@@ -1,0 +1,217 @@
+{
+  "pages": [
+    {
+      "index": 0,
+      "markdown": "# Synthetic OCR Citation Fixture\n\nPage one: stationery order\n\nAll names, quantities, and prices on these pages are invented.\n\nPacking checklist\n\n- Include the blue notebook.\n- Wrap the green pencil separately.\n\nOrder items\n\n|  Item | Quantity | Unit price | Total  |\n| --- | --- | --- | --- |\n|  Blue notebook | 2 | 3.00 | 6.00  |\n|  Green pencil | 4 | 1.50 | 6.00  |\n\nTotal: 12.00 fictional units\n\n![img-0.jpeg](img-0.jpeg)\n\nFigure 1: synthetic color bars\n\nSYNTHETIC FIXTURE - NOT A CUSTOMER DOCUMENT",
+      "images": [
+        {
+          "id": "img-0.jpeg",
+          "top_left_x": 82,
+          "top_left_y": 586,
+          "bottom_right_x": 271,
+          "bottom_right_y": 724,
+          "image_annotation": null
+        }
+      ],
+      "dimensions": {
+        "dpi": 93,
+        "height": 1023,
+        "width": 791
+      },
+      "tables": [],
+      "hyperlinks": [],
+      "header": null,
+      "footer": null,
+      "confidence_scores": null,
+      "blocks": [
+        {
+          "top_left_x": 59,
+          "top_left_y": 48,
+          "bottom_right_x": 443,
+          "bottom_right_y": 78,
+          "content": "# Synthetic OCR Citation Fixture",
+          "confidence_scores": null,
+          "type": "title"
+        },
+        {
+          "top_left_x": 59,
+          "top_left_y": 92,
+          "bottom_right_x": 296,
+          "bottom_right_y": 115,
+          "content": "Page one: stationery order",
+          "confidence_scores": null,
+          "type": "text"
+        },
+        {
+          "top_left_x": 59,
+          "top_left_y": 137,
+          "bottom_right_x": 493,
+          "bottom_right_y": 157,
+          "content": "All names, quantities, and prices on these pages are invented.",
+          "confidence_scores": null,
+          "type": "text"
+        },
+        {
+          "top_left_x": 59,
+          "top_left_y": 183,
+          "bottom_right_x": 219,
+          "bottom_right_y": 205,
+          "content": "Packing checklist",
+          "confidence_scores": null,
+          "type": "text"
+        },
+        {
+          "top_left_x": 75,
+          "top_left_y": 216,
+          "bottom_right_x": 322,
+          "bottom_right_y": 261,
+          "content": "- Include the blue notebook.\n- Wrap the green pencil separately.",
+          "confidence_scores": null,
+          "type": "list"
+        },
+        {
+          "top_left_x": 59,
+          "top_left_y": 293,
+          "bottom_right_x": 167,
+          "bottom_right_y": 313,
+          "content": "Order items",
+          "confidence_scores": null,
+          "type": "text"
+        },
+        {
+          "top_left_x": 59,
+          "top_left_y": 333,
+          "bottom_right_x": 707,
+          "bottom_right_y": 443,
+          "content": "|  Item | Quantity | Unit price | Total  |\n| --- | --- | --- | --- |\n|  Blue notebook | 2 | 3.00 | 6.00  |\n|  Green pencil | 4 | 1.50 | 6.00  |",
+          "confidence_scores": null,
+          "type": "table",
+          "table_id": null
+        },
+        {
+          "top_left_x": 59,
+          "top_left_y": 472,
+          "bottom_right_x": 256,
+          "bottom_right_y": 491,
+          "content": "Total: 12.00 fictional units",
+          "confidence_scores": null,
+          "type": "text"
+        },
+        {
+          "top_left_x": 82,
+          "top_left_y": 586,
+          "bottom_right_x": 271,
+          "bottom_right_y": 724,
+          "content": "![img-0.jpeg](img-0.jpeg)",
+          "image_id": "img-0.jpeg",
+          "confidence_scores": null,
+          "type": "image"
+        },
+        {
+          "top_left_x": 59,
+          "top_left_y": 737,
+          "bottom_right_x": 248,
+          "bottom_right_y": 756,
+          "content": "Figure 1: synthetic color bars",
+          "confidence_scores": null,
+          "type": "caption"
+        },
+        {
+          "top_left_x": 59,
+          "top_left_y": 955,
+          "bottom_right_x": 405,
+          "bottom_right_y": 971,
+          "content": "SYNTHETIC FIXTURE - NOT A CUSTOMER DOCUMENT",
+          "confidence_scores": null,
+          "type": "footer"
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "markdown": "# Synthetic OCR Citation Fixture\n\nPage two: delivery notes\n\n## Packing checklist\n\n- Check both parcel labels.\n- Keep the sample receipt.\n\nDelivery location: Example Desk, Test Building.\n\nThis document exists only to test OCR citation links.\n\nSYNTHETIC FIXTURE - NOT A CUSTOMER DOCUMENT",
+      "images": [],
+      "dimensions": {
+        "dpi": 93,
+        "height": 1023,
+        "width": 791
+      },
+      "tables": [],
+      "hyperlinks": [],
+      "header": null,
+      "footer": null,
+      "confidence_scores": null,
+      "blocks": [
+        {
+          "top_left_x": 60,
+          "top_left_y": 51,
+          "bottom_right_x": 443,
+          "bottom_right_y": 81,
+          "content": "# Synthetic OCR Citation Fixture",
+          "confidence_scores": null,
+          "type": "title"
+        },
+        {
+          "top_left_x": 60,
+          "top_left_y": 95,
+          "bottom_right_x": 278,
+          "bottom_right_y": 117,
+          "content": "Page two: delivery notes",
+          "confidence_scores": null,
+          "type": "text"
+        },
+        {
+          "top_left_x": 60,
+          "top_left_y": 166,
+          "bottom_right_x": 219,
+          "bottom_right_y": 187,
+          "content": "## Packing checklist",
+          "confidence_scores": null,
+          "type": "title"
+        },
+        {
+          "top_left_x": 75,
+          "top_left_y": 205,
+          "bottom_right_x": 264,
+          "bottom_right_y": 252,
+          "content": "- Check both parcel labels.\n- Keep the sample receipt.",
+          "confidence_scores": null,
+          "type": "list"
+        },
+        {
+          "top_left_x": 60,
+          "top_left_y": 297,
+          "bottom_right_x": 390,
+          "bottom_right_y": 317,
+          "content": "Delivery location: Example Desk, Test Building.",
+          "confidence_scores": null,
+          "type": "text"
+        },
+        {
+          "top_left_x": 60,
+          "top_left_y": 329,
+          "bottom_right_x": 422,
+          "bottom_right_y": 349,
+          "content": "This document exists only to test OCR citation links.",
+          "confidence_scores": null,
+          "type": "text"
+        },
+        {
+          "top_left_x": 62,
+          "top_left_y": 957,
+          "bottom_right_x": 405,
+          "bottom_right_y": 974,
+          "content": "SYNTHETIC FIXTURE - NOT A CUSTOMER DOCUMENT",
+          "confidence_scores": null,
+          "type": "footer"
+        }
+      ]
+    }
+  ],
+  "model": "mistral-ocr-4-0",
+  "usage_info": {
+    "pages_processed": 2,
+    "doc_size_bytes": 3149
+  },
+  "document_annotation": null
+}

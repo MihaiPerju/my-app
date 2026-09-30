@@ -1,0 +1,7 @@
+{
+  "name": "@mistral/tsconfig",
+  "version": "0.1.0",
+  "private": true,
+  "files": ["*.json", "*.d.ts"],
+  "//": "The shared TypeScript base the other vendored `@mistral/*` copies were already reaching for. All four of them `extends \"@mistral/tsconfig/tsconfig.internal-package.json\"`, and it was never vendored alongside them — invisible for as long as nothing in this repo imported those copies, because nothing resolved their tsconfig. `apps/web` importing `@mistral/markdown` made it the first consumer: rolldown reads a package's tsconfig when it transforms that package's raw .ts, and the build failed with `Tsconfig not found`. Vendored verbatim from the same monorepo as its four siblings (ts/tooling/typescript), minus the `tsconfig.next.json` and `tsconfig.reactnative.json` bases, which no vendored package here extends. JSON and one .d.ts; no runtime code, which is why it is a root devDependency rather than a dependency of apps/web."
+}

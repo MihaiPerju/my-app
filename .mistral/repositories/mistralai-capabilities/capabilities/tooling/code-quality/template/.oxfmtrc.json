@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "ignorePatterns": [
+    "packages/ts/atelier/**",
+    "packages/ts/common/**",
+    "packages/ts/i18n/**",
+    "packages/ts/markdown/**",
+    "packages/ts/next-hotkey/**",
+    "packages/ts/tailwind-config/**",
+    "packages/ts/tsconfig/**",
+    ".sisyphus/**",
+    ".agents/skills/workflows/**",
+    "**/*.gen.ts",
+    "**/api/generated/**",
+    "**/*.min.mjs",
+    "**/package.json",
+    "apps/api/openapi.json",
+    "**/*.yaml",
+    "**/*.yml",
+    "**/*.toml",
+    "tools/oxlint/anti-slop/**"
+  ]
+}

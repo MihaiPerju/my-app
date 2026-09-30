@@ -1,0 +1,47 @@
+# Solutions PII scanner config. See mistralai-solutions/solutions-pii-scanner.
+allowlist_patterns:
+  # Canonical Visa test card used in capabilities/feature/document-annotation-ui/package/py/tests/test_validation.py
+  # (test_debug_path_message_does_not_leak_the_raw_input_value). It is dummy data that
+  # asserts redaction behavior, not real PII, so exclude it from the financial/HR gate.
+  # NOTE: allowlist_patterns is merged on top of the scanner's built-in defaults.
+  - "4111-1111-1111-1111"
+
+# Setting skip_paths REPLACES the scanner's built-in defaults (unlike allowlist_patterns, which
+# merges), so the defaults are re-listed verbatim below, followed by this repo's additions.
+skip_paths:
+  # --- Scanner defaults (DEFAULT_SKIP_PATHS @ solutions-pii-scanner v0.3.5), re-listed verbatim ---
+  - "**/node_modules/**"
+  - "**/dist/**"
+  - "**/build/**"
+  - "**/.git/**"
+  - "**/*.lock"
+  - "**/package-lock.json"
+  - "**/yarn.lock"
+  - "**/pnpm-lock.yaml"
+  - "**/bun.lockb"
+  - "**/*.png"
+  - "**/*.jpg"
+  - "**/*.jpeg"
+  - "**/*.gif"
+  - "**/*.webp"
+  - "**/*.pdf"
+  - "**/*.zip"
+  - "**/*.tar"
+  - "**/*.gz"
+  - "**/*.bin"
+  - "**/*.svg"
+  - "**/*.ico"
+  - "**/*.woff"
+  - "**/*.woff2"
+  - "**/*.ttf"
+  - "**/*.eot"
+  - "**/*.mp4"
+  - "**/*.mp3"
+  - "**/*.wav"
+  # --- Additions beyond the scanner defaults (this repo) ---
+  # Minified JS / wasm: unreadable build artifacts, not PII-scannable, and the chunker crashes on
+  # large minified files (the vendored pdfjs worker). Removable once that worker/wasm is emitted at
+  # build time rather than vendored — see capabilities/feature/document-annotation-ui/INSTALL.md, "Known debt".
+  - "**/*.min.js"
+  - "**/*.min.mjs"
+  - "**/*.wasm"

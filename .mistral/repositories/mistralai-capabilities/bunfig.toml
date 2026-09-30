@@ -1,0 +1,4 @@
+# Pin the install registry to public npm so a developer's personal or global registry config cannot
+# leak private-host tarball URLs into the committed bun.lock and break CI installs.
+[install]
+registry = "https://registry.npmjs.org"

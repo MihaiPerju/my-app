@@ -1,0 +1,29 @@
+{
+  "id": "fastapi-auth",
+  "version": "0.0.0",
+  "title": "FastAPI \u2014 Auth",
+  "description": "FastAPI × auth integration. Owns the gateway-identity gate/types/store seam, the Postgres user-store adapter that apps/api mounts, and the authenticated /api/v1 mount. Hidden: it activates automatically when FastAPI and auth are both effective, and selecting it directly is shorthand for that set. Generic database workspace wiring, lifecycle and readiness follow the postgres capability independently.",
+  "kind": "feature",
+  "visible": false,
+  "activatedWhen": {
+    "allOf": [
+      "fastapi",
+      "auth"
+    ]
+  },
+  "categories": [
+    "solutions"
+  ],
+  "packages": [
+    "ts",
+    "py"
+  ],
+  "envVars": {
+    "IDENTITY_HEADER_USER_EMAIL": "x-user-email",
+    "IDENTITY_HEADER_USER_ID": "x-user-id"
+  },
+  "metadata": {
+    "weight": 2,
+    "public": false
+  }
+}

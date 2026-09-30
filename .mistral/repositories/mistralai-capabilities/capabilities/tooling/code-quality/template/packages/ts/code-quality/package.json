@@ -1,0 +1,12 @@
+{
+  "name": "@app/code-quality",
+  "private": true,
+  "version": "0.0.1",
+  "devDependencies": {
+    "@oxlint/plugins": "1.83.0",
+    "@shadcn/lint": "0.1.0",
+    "oxfmt": "0.58.0",
+    "oxlint": "1.83.0",
+    "oxlint-tsgolint": "^7.0.2001"
+  }
+}

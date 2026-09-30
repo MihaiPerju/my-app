@@ -1,0 +1,34 @@
+[project]
+name = "mistralai-capabilities-feature-guardrailing-eval"
+version = "0.1.0"
+description = "Guardrailing-eval capability: measure moderation-policy quality with shared metrics, a fail-closed label contract, and a scanner harness on mistralai.evaluations."
+requires-python = ">=3.12,<3.15"
+license = "LicenseRef-Proprietary"
+dependencies = [
+    "mistralai-evaluations>=0.7.1,<0.8",
+    "pydantic>=2",
+]
+
+# `mistralai-evaluations` is published on public PyPI. Bound to an explicit `pypi` index so a
+# private index that also carries the name can never serve it.
+[tool.uv.sources]
+mistralai-evaluations = { index = "pypi" }
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+default = true
+
+[build-system]
+requires = ["uv_build>=0.8.22,<0.9.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+# Dist name follows the CLI convention (`<registry id>-<capability id>`); the
+# import path is `mistralai_capabilities.guardrailing_eval`. `namespace = true` makes
+# it a PEP-420 portion so sibling capability dists share `mistralai_capabilities`.
+module-name = "mistralai_capabilities.guardrailing_eval"
+namespace = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

@@ -1,0 +1,59 @@
+# syntax=docker/dockerfile:1.7-labs
+# Deployment-owned initialization image: the canonical Python workspace runtime with no service
+# entrypoint, kept byte-identical with the api and worker Dockerfiles (tests/registry pins the shared
+# toolchain and build pipeline across all three). The Compose init chain runs the app's cli
+# commands against it, so it must build from an app that selected neither backend module — hence its
+# own image here rather than a reuse of the api or worker target.
+FROM python:3.14-slim AS build
+COPY --from=ghcr.io/astral-sh/uv:0.11.17 /uv /uvx /bin/
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends build-essential && \
+    rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+ENV UV_PYTHON_PREFERENCE=only-system \
+    UV_NO_PYTHON_DOWNLOADS=1 \
+    UV_LINK_MODE=copy \
+    UV_COMPILE_BYTECODE=1
+ARG REGISTRY_PY_USER
+COPY tools/uv.sh /tmp/registry-uv.sh
+COPY tools/docker/sync-python-workspace.sh /usr/local/bin/sync-python-workspace
+# Preserve source paths for workspace manifests and vendored Git capability packages. The latter is a
+# wildcard because package-source apps do not contain `.mistral/repositories`.
+COPY --parents pyproject.toml uv.lock packages/py/*/pyproject.toml apps/*/pyproject.toml .mistral/repositories/*/capabilities/*/*/package/py ./
+RUN --mount=type=secret,id=registry_token \
+    --mount=type=cache,target=/root/.cache/uv \
+    if [ -f /run/secrets/registry_token ]; then \
+        registry_user="${REGISTRY_PY_USER:-$(sed -n 's/^export MISTRAL_REGISTRY_USER=//p' /tmp/registry-uv.sh)}" && \
+        test -n "$registry_user" && \
+        registry_password="$(cat /run/secrets/registry_token)" && \
+        export UV_INDEX_MISTRALAI_USERNAME="$registry_user" \
+               UV_INDEX_MISTRALAI_PASSWORD="$registry_password"; \
+    fi && \
+    sync-python-workspace dependencies
+COPY . .
+RUN --mount=type=secret,id=registry_token \
+    --mount=type=cache,target=/root/.cache/uv \
+    if [ -f /run/secrets/registry_token ]; then \
+        registry_user="${REGISTRY_PY_USER:-$(sed -n 's/^export MISTRAL_REGISTRY_USER=//p' /tmp/registry-uv.sh)}" && \
+        test -n "$registry_user" && \
+        registry_password="$(cat /run/secrets/registry_token)" && \
+        export UV_INDEX_MISTRALAI_USERNAME="$registry_user" \
+               UV_INDEX_MISTRALAI_PASSWORD="$registry_password"; \
+    fi && \
+    sync-python-workspace runtime
+
+FROM python:3.14-slim AS runtime
+COPY --from=ghcr.io/astral-sh/uv:0.11.17 /uv /uvx /bin/
+WORKDIR /app
+ENV UV_PYTHON_PREFERENCE=only-system \
+    UV_NO_PYTHON_DOWNLOADS=1 \
+    UV_CACHE_DIR=/tmp/uv-cache \
+    XDG_CACHE_HOME=/tmp \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/app/.venv/bin:${PATH}"
+RUN groupadd -g 1000 app && \
+    useradd -u 1000 -g 1000 -m -s /usr/sbin/nologin app
+COPY --from=build --chown=1000:1000 /app /app
+USER 1000:1000
+
+FROM runtime AS init

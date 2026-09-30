@@ -1,0 +1,11 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "helm",
+  "projectType": "library",
+  "targets": {
+    "validate": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash tools/validate-helm.sh", "cwd": "{workspaceRoot}" }
+    }
+  }
+}

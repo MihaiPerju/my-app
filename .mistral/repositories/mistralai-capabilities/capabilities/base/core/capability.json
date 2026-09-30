@@ -1,0 +1,30 @@
+{
+  "id": "core",
+  "version": "0.0.0",
+  "title": "Core",
+  "description": "Required application workspace shell: Bun and uv roots, NX project discovery, repeatable install and lock commands, and shared app-local settings, logging, telemetry, client, and command-line utilities.",
+  "kind": "base",
+  "required": true,
+  "categories": [
+    "solutions"
+  ],
+  "packages": [
+    "ts"
+  ],
+  "envVars": {
+    "LOG_LEVEL": "INFO",
+    "LOG_FORMAT": "json",
+    "APP_NAME": "{{app_name}}",
+    "MISTRAL_API_KEY": "",
+    "MISTRAL_BASE_URL": "https://api.mistral.ai",
+    "TELEMETRY_ENABLED": "true",
+    "TELEMETRY_ENDPOINT": "https://api.mistral.ai/telemetry/v1/logs",
+    "TELEMETRY_SERVICE_NAME": "{{app_name}}",
+    "TELEMETRY_EXPORT_TIMEOUT_SECONDS": "5.0"
+  },
+  "metadata": {
+    "weight": 0,
+    "public": true,
+    "registryPins": ["bunfig.toml", "gitignore", "package.json", "pyproject.toml", "tools/uv.sh"]
+  }
+}

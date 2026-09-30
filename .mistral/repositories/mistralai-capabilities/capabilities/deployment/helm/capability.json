@@ -1,0 +1,18 @@
+{
+  "id": "helm",
+  "version": "0.0.0",
+  "title": "Helm",
+  "description": "Optional Kubernetes deployment: the umbrella Helm chart, shared `common` library chart, hardened initialization chart, the network-policy/secret/service-account templates, and the `helm-validate` task. Hidden `helm-*` integration capabilities own runtime and database subcharts and activate with their service; the hidden `helm-auth` integration owns the APISIX edge gateway, the OIDC ingress, and the gateway/auth values, so a Helm selection without auth renders no gateway or ingress. Template-only — it publishes no package and is delivered through the Git source.",
+  "kind": "deployment",
+  "categories": [
+    "solutions"
+  ],
+  "dependencies": [
+    "core"
+  ],
+  "packages": [],
+  "metadata": {
+    "weight": 51,
+    "public": false
+  }
+}

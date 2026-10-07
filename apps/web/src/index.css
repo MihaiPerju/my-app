@@ -10,3 +10,97 @@
     @apply antialiased;
   }
 }
+
+@theme {
+  --color-ink: #0a0a0b;
+  --color-mist: #f5f5f7;
+  --color-flame: #fa500f;
+  --color-amber: #ffaf00;
+  --font-display: "SF Pro Display", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    background: var(--color-ink);
+  }
+
+  body {
+    font-family: var(--font-display);
+    color: var(--color-mist);
+    background: var(--color-ink);
+  }
+}
+
+@layer components {
+  .gradient-text {
+    background: linear-gradient(100deg, #ffd800 0%, #ffaf00 25%, #fa500f 60%, #e10500 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .headline {
+    @apply font-semibold tracking-tight;
+    letter-spacing: -0.035em;
+    line-height: 1.02;
+  }
+
+  .reveal {
+    opacity: 0;
+    transform: translateY(32px) scale(0.98);
+    transition:
+      opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1),
+      transform 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+    transition-delay: var(--delay, 0ms);
+  }
+
+  .reveal[data-visible="true"] {
+    opacity: 1;
+    transform: none;
+  }
+
+  .card {
+    @apply relative overflow-hidden rounded-[2rem] border border-white/10;
+    background: linear-gradient(160deg, rgb(255 255 255 / 0.06), rgb(255 255 255 / 0.015));
+  }
+
+  .glow {
+    background: radial-gradient(closest-side, rgb(250 80 15 / 0.45), transparent 70%);
+    filter: blur(40px);
+  }
+}
+
+@keyframes float {
+  50% {
+    transform: translateY(-14px);
+  }
+}
+
+@keyframes caret {
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes drift {
+  to {
+    transform: translate3d(40px, -30px, 0) scale(1.15);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  html {
+    scroll-behavior: auto;
+  }
+
+  * {
+    animation: none !important;
+  }
+}

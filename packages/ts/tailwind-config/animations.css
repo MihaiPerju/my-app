@@ -1,0 +1,126 @@
+/*
+ * Design-system animation primitives.
+ *
+ * Everything animation-related lives here: the tw-animate-css import, the
+ * DS-owned @keyframes, and the animation theme vars. @keyframes are GLOBAL and
+ * cannot be scoped, so DS frames are given unique `aura-*` names to avoid
+ * collisions with third-party stylesheets (see note below).
+ */
+/* Vendoring deletion: upstream imports "tw-animate-css" here. apps/web/src/index.css already
+ * imports it ahead of this file, so a second import would emit every utility twice. See web.css. */
+
+/*
+ * tw-animate-css names its keyframes `enter`/`exit`. @keyframes are global and
+ * can't be scoped, so third parties shipping their own `enter`/`exit` (e.g.
+ * Univer) clobber ours and break every Radix/DS animation. Re-point
+ * `animate-in`/`animate-out` at uniquely-named `aura-*` frames instead.
+ * Internal only — consumer classes and `--tw-enter-*`/`--tw-exit-*` are unchanged.
+ */
+@keyframes aura-animate-in {
+  from {
+    opacity: var(--tw-enter-opacity, 1);
+    transform: translate3d(var(--tw-enter-translate-x, 0), var(--tw-enter-translate-y, 0), 0)
+      scale3d(var(--tw-enter-scale, 1), var(--tw-enter-scale, 1), var(--tw-enter-scale, 1))
+      rotate(var(--tw-enter-rotate, 0));
+    filter: blur(var(--tw-enter-blur, 0));
+  }
+}
+@keyframes aura-animate-out {
+  to {
+    opacity: var(--tw-exit-opacity, 1);
+    transform: translate3d(var(--tw-exit-translate-x, 0), var(--tw-exit-translate-y, 0), 0)
+      scale3d(var(--tw-exit-scale, 1), var(--tw-exit-scale, 1), var(--tw-exit-scale, 1))
+      rotate(var(--tw-exit-rotate, 0));
+    filter: blur(var(--tw-exit-blur, 0));
+  }
+}
+
+@theme inline {
+  --animate-in: aura-animate-in var(--tw-animation-duration, var(--tw-duration, 0.15s)) var(--tw-ease, ease)
+    var(--tw-animation-delay, 0s) var(--tw-animation-iteration-count, 1) var(--tw-animation-direction, normal)
+    var(--tw-animation-fill-mode, none);
+  --animate-out: aura-animate-out var(--tw-animation-duration, var(--tw-duration, 0.15s)) var(--tw-ease, ease)
+    var(--tw-animation-delay, 0s) var(--tw-animation-iteration-count, 1) var(--tw-animation-direction, normal)
+    var(--tw-animation-fill-mode, none);
+}
+
+/* Shimmer text effect — translating gradient clipped to text glyphs.
+   Base color comes from `currentColor` (set via text-muted, etc.),
+   highlight peak from --text-default. */
+.animate-shimmer-text {
+  background: linear-gradient(
+    90deg,
+    currentColor 0%,
+    currentColor 40%,
+    var(--text-default) 50%,
+    currentColor 60%,
+    currentColor 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: animate-shimmer-text 2s ease-in-out infinite;
+}
+
+@keyframes animate-shimmer-text {
+  0%,
+  20% {
+    background-position: 150% 0;
+  }
+  100% {
+    background-position: -50% 0;
+  }
+}
+
+.animate-shimmer-mask {
+  /* Mask colors are not rendered; only the alpha channel controls visibility. */
+  --shimmer-mask-base-opacity: 0.62;
+  --shimmer-mask-shoulder-opacity: 0.92;
+  mask-image: linear-gradient(
+    90deg,
+    rgba(0, 0, 0, var(--shimmer-mask-base-opacity)) 0%,
+    rgba(0, 0, 0, var(--shimmer-mask-base-opacity)) 34%,
+    rgba(0, 0, 0, var(--shimmer-mask-shoulder-opacity)) 44%,
+    rgba(0, 0, 0, 1) 50%,
+    rgba(0, 0, 0, var(--shimmer-mask-shoulder-opacity)) 56%,
+    rgba(0, 0, 0, var(--shimmer-mask-base-opacity)) 66%,
+    rgba(0, 0, 0, var(--shimmer-mask-base-opacity)) 100%
+  );
+  mask-size: 200% 100%;
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    rgba(0, 0, 0, var(--shimmer-mask-base-opacity)) 0%,
+    rgba(0, 0, 0, var(--shimmer-mask-base-opacity)) 34%,
+    rgba(0, 0, 0, var(--shimmer-mask-shoulder-opacity)) 44%,
+    rgba(0, 0, 0, 1) 50%,
+    rgba(0, 0, 0, var(--shimmer-mask-shoulder-opacity)) 56%,
+    rgba(0, 0, 0, var(--shimmer-mask-base-opacity)) 66%,
+    rgba(0, 0, 0, var(--shimmer-mask-base-opacity)) 100%
+  );
+  -webkit-mask-size: 200% 100%;
+  animation: animate-shimmer-mask 1.5s ease-in-out var(--skeleton-shimmer-delay, 0s) infinite backwards;
+}
+
+.dark .animate-shimmer-mask {
+  --shimmer-mask-base-opacity: 0.52;
+  --shimmer-mask-shoulder-opacity: 0.88;
+}
+
+@keyframes animate-shimmer-mask {
+  0%,
+  20% {
+    mask-position: 150% 0;
+    -webkit-mask-position: 150% 0;
+  }
+  100% {
+    mask-position: -50% 0;
+    -webkit-mask-position: -50% 0;
+  }
+}
+
+@keyframes aura-animate-slide-in {
+  from {
+    transform: translateY(6px);
+  }
+}

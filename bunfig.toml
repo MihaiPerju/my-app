@@ -22,3 +22,6 @@ minimumReleaseAgeExcludes = ["@mistral/workflow-ui", "@mistralai/ui"]
 # at the end of the file when it installs capability packages, so the table stays last.
 [install.scopes]
 "@mistralai-capabilities" = { url = "https://npm.cloudsmith.io/mistral-ai/sdk-distribution/", token = "$NODE_AUTH_TOKEN" }
+
+# @mistral/* are installed from https://npm.cloudsmith.io/mistral-ai/sdk-distribution/ ($NODE_AUTH_TOKEN).
+"@mistral" = { url = "https://npm.cloudsmith.io/mistral-ai/sdk-distribution/", token = "$NODE_AUTH_TOKEN" }

@@ -1,0 +1,14 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "chat",
+  "projectType": "library",
+  "targets": {
+    "register-agent": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "bash tools/uv.sh run --no-sync python -m cli agents",
+        "cwd": "{workspaceRoot}"
+      }
+    }
+  }
+}

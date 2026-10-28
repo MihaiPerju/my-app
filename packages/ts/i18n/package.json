@@ -1,0 +1,26 @@
+{
+  "name": "@mistral/i18n",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    },
+    "./server": {
+      "default": "./src/server.ts"
+    }
+  },
+  "//scripts": "The upstream scripts (pnpm -w …, mtsc, vitest) belong to the monorepo this package was vendored out of and cannot run here; they are dropped so nx does not pick this workspace member up as a build/test target.",
+  "//dependencies": "Vendored out of the upstream monorepo: the upstream `catalog:`/`workspace:*` protocols are meaningless here, so every specifier is concrete. `@mistral/monitoring` (workspace:*) is unpublished and unobtainable; its single `logger.warn` call in src/server.ts is inlined there instead. `@types/negotiator` is a dependency, not a devDependency, because this package ships raw .ts source and negotiator@1 ships no types of its own.",
+  "dependencies": {
+    "@formatjs/intl-localematcher": "^0.8.0",
+    "@types/negotiator": "^0.6.3",
+    "deepmerge": "^4.3.1",
+    "negotiator": "^1.0.0"
+  },
+  "devDependencies": {
+    "@mistral/tsconfig": "workspace:*"
+  }
+}

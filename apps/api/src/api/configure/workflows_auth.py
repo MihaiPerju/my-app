@@ -1,0 +1,3 @@
+from mistralai_capabilities.fastapi_workflows_auth.stores import install_execution_store
+
+configure = install_execution_store

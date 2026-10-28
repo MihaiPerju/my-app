@@ -1,5 +1,7 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "kind": "app",
+  "name": "my-app",
   "deployment": {
     "organizationId": "3fbdc95a-16ce-4532-b77f-e8836f047a29",
     "workspaceId": "454a3f9a-581e-4c27-a3f3-d3aa5874adaf",
@@ -13,6 +15,10 @@
       "routes": [
         {
           "path": "/api"
+        },
+        {
+          "path": "/mcp",
+          "mcp": true
         }
       ],
       "port": 3000,
@@ -76,6 +82,11 @@
       "deploy": {
         "startCommand": "node .output/server/index.mjs"
       }
+    },
+    {
+      "type": "managed",
+      "name": "postgres",
+      "engine": "postgres"
     }
   ]
 }

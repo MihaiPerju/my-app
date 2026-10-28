@@ -1,0 +1,13 @@
+{
+  // Extends the non-emitting base on purpose. `scripts` imports
+  // @mistral/le-chat-client-common source, and the `outDir` that
+  // tsconfig.internal-package.json adds makes TypeScript 7 infer a rootDir of
+  // this package and reject those files. Emit is governed by
+  // tsconfig.build.json, which still extends the internal-package base.
+  "extends": "@mistral/tsconfig/tsconfig.base.json",
+  "include": ["src", "tests", "scripts"],
+  "compilerOptions": {
+    "types": ["node", "vitest/globals"]
+  },
+  "exclude": ["node_modules"]
+}

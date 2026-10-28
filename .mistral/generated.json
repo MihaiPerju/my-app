@@ -2,8 +2,24 @@
   "schemaVersion": 4,
   "generated": [
     {
+      "path": ".npmrc",
+      "base": "30caf07a89d4e5ecfbc73fdc4c34c4d6c6c337d938e6f87a559b0eabcee75410"
+    },
+    {
       "path": "apps/api/pyproject.toml",
-      "base": "c81dde2cdd5031591194b033a47df2aa7f36505113b2a9558eb42579747c1553"
+      "base": "6f01f2bc8a29aaa89fafc532039d693e4bff13b377ba017628579e71652fdfbb"
+    },
+    {
+      "path": "packages/py/db/alembic.ini",
+      "base": "1804f649f4d2fee0715331eaa0dc8e555fa0b87c960280b905a18bd398f1ea25"
+    },
+    {
+      "path": "packages/ts/chat/package.json",
+      "base": "d672c2869c46d0372a07f26cbebe270b63a42734a9e658b122b4c92ab304922d"
+    },
+    {
+      "path": "packages/ts/mistral-design-system/package.json",
+      "base": "b1257de0633fde99d705f1011966173094ac5472670b6d8b086f3ac7e5fec453"
     }
   ]
 }

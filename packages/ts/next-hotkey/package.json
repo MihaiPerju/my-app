@@ -1,0 +1,26 @@
+{
+  "name": "@mistral/next-hotkey",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    }
+  },
+  "license": "MIT",
+  "//": "React is the one host peer. Despite the package name, src/ never imports `next` — the upstream `next` peer was dropped when this package was vendored.",
+  "//scripts": "The upstream scripts (pnpm -w …, mtsc, vitest) belong to the monorepo this package was vendored out of and cannot run here; they are dropped so nx does not pick this workspace member up as a build/test target.",
+  "//dependencies": "Vendored out of the upstream monorepo: the upstream `catalog:`/`workspace:*` protocols are meaningless here, so every specifier is concrete. `usehooks-ts` is imported by src/use-hotkey.ts and was only a devDependency upstream — it is a real runtime dependency and is declared as one. `remeda` is imported by src/use-deep-equal-memo.ts and pinned to the version `@mistral/common` uses.",
+  "dependencies": {
+    "remeda": "2.39.0",
+    "usehooks-ts": "^3.1.1"
+  },
+  "peerDependencies": {
+    "react": "^19.2.7"
+  },
+  "devDependencies": {
+    "@mistral/tsconfig": "workspace:*"
+  }
+}

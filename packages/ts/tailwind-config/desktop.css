@@ -1,0 +1,8 @@
+@utility app-shell-top-bar-* {
+  --app-shell-top-bar-gutter: calc(var(--spacing) * --value(integer));
+  padding-left: calc(var(--app-shell-top-bar-gutter) + var(--app-shell-top-bar-inset-left, 0px));
+  padding-right: calc(var(--app-shell-top-bar-gutter) + var(--app-shell-top-bar-inset-right, 0px));
+  transition-property: box-shadow, padding-left, padding-right;
+  transition-duration: var(--sidebar-transition-duration, 0ms);
+  transition-timing-function: var(--sidebar-transition-easing, ease);
+}

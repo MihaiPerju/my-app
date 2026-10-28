@@ -6,6 +6,12 @@ dependencies = [
     "mistralai-capabilities-backend-fastapi",
     "mistralai-capabilities-backend-workflows",
     "mistralai-capabilities-deployment-apps",
+    "mistralai-capabilities-feature-agents",
+    "mistralai-capabilities-feature-chat",
+    "mistralai-capabilities-feature-fastapi-auth",
+    "mistralai-capabilities-feature-fastapi-workflows-auth",
+    "mistralai-capabilities-feature-mcp-apps",
+    "mistralai-capabilities-feature-observability",
 ]
 
 [tool.uv]
@@ -61,6 +67,12 @@ explicit = true
 # the capability is selected. The CLI adds one entry here per selected capability toolkit.
 [tool.uv.sources]
 
+mistralai-capabilities-feature-observability = { path = ".mistral/repositories/mistralai-capabilities/capabilities/feature/observability/package/py" }
+mistralai-capabilities-feature-mcp-apps = { path = ".mistral/repositories/mistralai-capabilities/capabilities/feature/mcp-apps/package/py" }
+mistralai-capabilities-feature-fastapi-workflows-auth = { path = ".mistral/repositories/mistralai-capabilities/capabilities/feature/fastapi-workflows-auth/package/py" }
+mistralai-capabilities-feature-fastapi-auth = { path = ".mistral/repositories/mistralai-capabilities/capabilities/feature/fastapi-auth/package/py" }
+mistralai-capabilities-feature-chat = { path = ".mistral/repositories/mistralai-capabilities/capabilities/feature/chat/package/py" }
+mistralai-capabilities-feature-agents = { path = ".mistral/repositories/mistralai-capabilities/capabilities/feature/agents/package/py" }
 mistralai-capabilities-deployment-apps = { path = ".mistral/repositories/mistralai-capabilities/capabilities/deployment/apps/package/py" }
 mistralai-capabilities-backend-workflows = { path = ".mistral/repositories/mistralai-capabilities/capabilities/backend/workflows/package/py" }
 mistralai-capabilities-backend-fastapi = { path = ".mistral/repositories/mistralai-capabilities/capabilities/backend/fastapi/package/py" }

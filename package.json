@@ -52,6 +52,15 @@
     "@mistralai-capabilities/deployment-apps": "file:.mistral/repositories/mistralai-capabilities/capabilities/deployment/apps",
     "@mistralai-capabilities/deployment-apps-fastapi": "file:.mistral/repositories/mistralai-capabilities/capabilities/deployment/apps-fastapi",
     "@mistralai-capabilities/feature-fastapi-workflows": "file:.mistral/repositories/mistralai-capabilities/capabilities/feature/fastapi-workflows",
-    "@mistralai-capabilities/frontend-tanstack-start": "file:.mistral/repositories/mistralai-capabilities/capabilities/frontend/tanstack-start"
+    "@mistralai-capabilities/frontend-tanstack-start": "file:.mistral/repositories/mistralai-capabilities/capabilities/frontend/tanstack-start",
+    "@mistralai-capabilities/database-postgres": "file:.mistral/repositories/mistralai-capabilities/capabilities/database/postgres",
+    "@mistralai-capabilities/feature-agents": "file:.mistral/repositories/mistralai-capabilities/capabilities/feature/agents",
+    "@mistralai-capabilities/feature-chat": "file:.mistral/repositories/mistralai-capabilities/capabilities/feature/chat",
+    "@mistralai-capabilities/feature-fastapi-auth": "file:.mistral/repositories/mistralai-capabilities/capabilities/feature/fastapi-auth",
+    "@mistralai-capabilities/feature-fastapi-postgres": "file:.mistral/repositories/mistralai-capabilities/capabilities/feature/fastapi-postgres",
+    "@mistralai-capabilities/feature-fastapi-workflows-auth": "file:.mistral/repositories/mistralai-capabilities/capabilities/feature/fastapi-workflows-auth",
+    "@mistralai-capabilities/feature-mcp-apps": "file:.mistral/repositories/mistralai-capabilities/capabilities/feature/mcp-apps",
+    "@mistralai-capabilities/feature-mistral-design-system": "file:.mistral/repositories/mistralai-capabilities/capabilities/feature/mistral-design-system",
+    "@mistralai-capabilities/feature-observability": "file:.mistral/repositories/mistralai-capabilities/capabilities/feature/observability"
   }
 }

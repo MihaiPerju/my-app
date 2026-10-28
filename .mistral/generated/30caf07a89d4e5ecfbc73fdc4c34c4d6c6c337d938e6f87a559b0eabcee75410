@@ -1,0 +1,6 @@
+# Private Mistral npm registry (npm.cloudsmith.io).
+# Copy to .npmrc and provide NODE_AUTH_TOKEN (the registry pull token) via env.
+# .npmrc is gitignored; NEVER commit the token.
+@mistralai:registry=https://npm.cloudsmith.io/mistral-ai/sdk-distribution/
+@mistral:registry=https://npm.cloudsmith.io/mistral-ai/sdk-distribution/
+//npm.cloudsmith.io/mistral-ai/sdk-distribution/:_authToken=${NODE_AUTH_TOKEN}

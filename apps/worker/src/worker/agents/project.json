@@ -1,0 +1,33 @@
+{
+  "$schema": "../../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "agents",
+  "projectType": "library",
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "bash tools/uv.sh run --no-sync ty check --project apps/worker/src/worker/agents apps/worker/src/worker/agents",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "bash tools/uv.sh run --no-sync pytest apps/worker/tests/agents",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "dev": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "bash tools/uv.sh run --no-sync python tools/dev_agent.py",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "check": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["typecheck", "test"],
+      "options": { "command": "echo \"[check] agents gate passed\"", "cwd": "{workspaceRoot}" }
+    }
+  }
+}

@@ -5,6 +5,7 @@ requires-python = ">=3.12,<3.15"
 dependencies = [
     "utils",
     "mistralai>=2.9.4",
+    "db",
     "env",
     "workflows-app",
     # >=0.137.2: the toolkit's router loader imports `fastapi.routing.iter_route_contexts`, added
@@ -31,6 +32,7 @@ dev = [
 
 [tool.uv.sources]
 utils = { workspace = true }
+db = { workspace = true }
 env = { workspace = true }
 workflows-app = { workspace = true }
 

@@ -228,7 +228,7 @@ def VibeAgentsRouter(
         cursor: str | None = None,
     ) -> EventsHistory:
         await _owned_session(sessions, caller, session_id, agent)
-        history = _unwrap(await sessions.read_events_history(session_id=session_id, limit=limit, cursor=cursor))
+        history = _unwrap(await sessions.read_events_history(session_id=session_id, limit=min(limit, 500), cursor=cursor))
         return EventsHistory.model_validate(history)
 
     mount(

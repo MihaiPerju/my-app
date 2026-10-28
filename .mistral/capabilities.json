@@ -4,7 +4,6 @@
     "mistralai-capabilities/backend/fastapi",
     "mistralai-capabilities/backend/workflows",
     "mistralai-capabilities/deployment/apps",
-    "mistralai-capabilities/feature/chat",
     "mistralai-capabilities/frontend/tanstack-start"
   ],
   "installed": [
@@ -21,10 +20,6 @@
       "version": "0.0.0"
     },
     {
-      "capability": "mistralai-capabilities/database/postgres",
-      "version": "0.0.0"
-    },
-    {
       "capability": "mistralai-capabilities/deployment/apps",
       "version": "0.0.0"
     },
@@ -33,47 +28,11 @@
       "version": "0.0.0"
     },
     {
-      "capability": "mistralai-capabilities/feature/agents",
-      "version": "0.0.0"
-    },
-    {
-      "capability": "mistralai-capabilities/feature/auth",
-      "version": "0.0.0"
-    },
-    {
-      "capability": "mistralai-capabilities/feature/chat",
-      "version": "0.0.0"
-    },
-    {
-      "capability": "mistralai-capabilities/feature/fastapi-auth",
-      "version": "0.0.0"
-    },
-    {
-      "capability": "mistralai-capabilities/feature/fastapi-postgres",
-      "version": "0.0.0"
-    },
-    {
       "capability": "mistralai-capabilities/feature/fastapi-tanstack-start",
       "version": "0.0.0"
     },
     {
       "capability": "mistralai-capabilities/feature/fastapi-workflows",
-      "version": "0.0.0"
-    },
-    {
-      "capability": "mistralai-capabilities/feature/fastapi-workflows-auth",
-      "version": "0.0.0"
-    },
-    {
-      "capability": "mistralai-capabilities/feature/mcp-apps",
-      "version": "0.0.0"
-    },
-    {
-      "capability": "mistralai-capabilities/feature/mistral-design-system",
-      "version": "0.0.0"
-    },
-    {
-      "capability": "mistralai-capabilities/feature/observability",
       "version": "0.0.0"
     },
     {

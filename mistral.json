@@ -15,10 +15,6 @@
       "routes": [
         {
           "path": "/api"
-        },
-        {
-          "path": "/mcp",
-          "mcp": true
         }
       ],
       "port": 3000,
